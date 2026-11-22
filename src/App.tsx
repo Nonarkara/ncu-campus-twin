@@ -93,7 +93,7 @@ function MoveLens({ l }: { l: L }) {
     const rows: Row[] = upcoming(tt[k].rows, col, hm, weekend).slice(0, 5);
     const multi = new Set(rows.map(r => r[0])).size > 1;
     return <li><span>{pick(label, l)}</span>
-      <b>{rows.length ? rows.map((r, i) => <span key={i} className="t">{r[col]}{multi && <sub>{r[0]}</sub>}</span>) : (l === 'en' ? 'none left today' : '今日已無班次')}</b></li>;
+      <b className="times">{rows.length ? rows.map((r, i) => <span key={i} className="t">{r[col]}{multi && <sub>{r[0]}</sub>}</span>) : (l === 'en' ? 'none left today' : '今日已無班次')}</b></li>;
   };
   const left = upcoming(tt.toTaipei.rows, 2, hm, weekend).length;
   return <>
