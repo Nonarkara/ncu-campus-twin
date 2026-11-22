@@ -24,7 +24,9 @@ import { CampusMap, type Lens } from './CampusMap';
 import { TwinLens, type Eco, type Ndvi, type Layer } from './TwinLens';
 import { FindLens, type Directory } from './FindLens';
 import { DOCK_EN, SLOW_KMH, parseYouBike, type Live } from './shared/live';
+import type { NewsPayload } from './shared/news';
 import { HeadwayStrip, HourlyStrip, IslandChart, type MetricKey } from './Charts';
+import { NewsCorpusPanel, NewsTicker } from './NewsWire';
 
 type L = 'en' | 'zh';
 type Row = [string, string, string, string];
@@ -202,6 +204,7 @@ function TodayLens({
   err,
   campus,
   live,
+  news,
   onSelectBuilding,
   l,
 }: {
@@ -209,6 +212,7 @@ function TodayLens({
   err: boolean;
   campus: CampusData | null;
   live: Live | null;
+  news: NewsPayload | null;
   onSelectBuilding: (id: string) => void;
   l: L;
 }) {
@@ -347,6 +351,8 @@ function TodayLens({
           </div>
         </>
       )}
+
+      <NewsCorpusPanel news={news} l={l} />
 
       <details className="off">
         <summary>{t.slots.length} {tr('off', l)} ›</summary>
@@ -697,6 +703,7 @@ export function App() {
   const [eco, setEco] = useState<Eco | null>(null);
   const [ndvi, setNdvi] = useState<any>(null);
   const [live, setLive] = useState<Live | null>(null);
+  const [news, setNews] = useState<NewsPayload | null>(null);
   const [dir, setDir] = useState<Directory | null>(null);
   const [layers, setLayers] = useState<Set<Layer>>(() => new Set<Layer>(['b3d', 'green', 'water', 'flow']));
   const toggleLayer = (k: Layer) => setLayers(prev => { const n = new Set(prev); n.has(k) ? n.delete(k) : n.add(k); return n; });
@@ -705,15 +712,17 @@ export function App() {
   useEffect(() => {
     const load = async () => {
       if (document.hidden) return;
-      const [road, yb] = await Promise.allSettled([
+      const [road, yb, nw] = await Promise.allSettled([
         fetch('/api/live').then(r => r.json() as Promise<Pick<Live, 'road'>>),
         fetch('https://apis.youbike.com.tw/json/station-yb2.json').then(r => r.json() as Promise<any[]>),
+        fetch('/api/news').then(r => r.json() as Promise<NewsPayload>),
       ]);
       const docks = yb.status === 'fulfilled' ? parseYouBike(yb.value) : [];
       setLive({
         road: road.status === 'fulfilled' ? road.value.road : { data: [], meta: { source: 'Freeway Bureau VD (MOTC)', tier: 'unavailable', asOf: null } },
         docks: { data: docks, meta: { source: 'YouBike 2.0 station feed', tier: docks.length ? 'live' : 'unavailable', asOf: docks.map(d => d.at).sort().at(-1) ?? null } },
       });
+      if (nw.status === 'fulfilled' && nw.value?.items) setNews(nw.value);
     };
     load();
     const id = setInterval(load, 300000);
@@ -860,7 +869,7 @@ export function App() {
         )}
 
         {lens === 'today' && (
-          <TodayLens t={today} err={todayErr} campus={campus} live={live} onSelectBuilding={focusBuilding} l={l} />
+          <TodayLens t={today} err={todayErr} campus={campus} live={live} news={news} onSelectBuilding={focusBuilding} l={l} />
         )}
         {lens === 'twin' && (
           <TwinLens
@@ -905,18 +914,21 @@ export function App() {
         </p>
       </section>
 
-      <CampusMap
-        lens={lens}
-        l={l}
-        campus={campus}
-        selectedBuildingId={selectedBuildingId}
-        onSelectBuilding={focusBuilding}
-        portfolioIds={portfolioIds}
-        selectedStopName={selectedStopName}
-        onSelectStop={focusStop}
-        focusCoord={focusCoord}
-        twin={twin}
-      />
+      <div className="map-col">
+        <CampusMap
+          lens={lens}
+          l={l}
+          campus={campus}
+          selectedBuildingId={selectedBuildingId}
+          onSelectBuilding={focusBuilding}
+          portfolioIds={portfolioIds}
+          selectedStopName={selectedStopName}
+          onSelectStop={focusStop}
+          focusCoord={focusCoord}
+          twin={twin}
+        />
+        <NewsTicker news={news} l={l} />
+      </div>
     </div>
   );
 }

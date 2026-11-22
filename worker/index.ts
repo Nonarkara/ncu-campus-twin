@@ -1,6 +1,16 @@
 // Edge: static assets + /api/today. Fetches open feeds, wraps each in {source, tier, asOf}, runs the Today engine.
 import { buildToday, type Feed, type Forecast, type Air } from '../src/shared/today';
 import { parseVDLive, type Live } from '../src/shared/live';
+import {
+  NEWS_FEEDS,
+  mergeNewsCorpus,
+  parseGoogleNewsRss,
+  summarizeNews,
+  toCsv,
+  toJsonl,
+  type NewsItem,
+  type NewsPayload,
+} from '../src/shared/news';
 
 interface Env { ASSETS: Fetcher; LIVE: KVNamespace; DEV?: string }
 const LAT = 24.9684, LON = 121.1916; // OSM relation/18727079 centre
@@ -68,15 +78,82 @@ export default {
   async scheduled(_e: ScheduledController, env: Env, ctx: ExecutionContext) {
     // Record why a pull failed so /api/live can say so; the last good reading stays in place.
     ctx.waitUntil(pullRoad(env).catch(e => env.LIVE.put('road_err', `${new Date().toISOString()} ${String((e as Error)?.message ?? e).slice(0, 160)}`)));
+    // Refresh NCU & Taoyuan news corpus every 15 min (on 00, 15, 30, 45)
+    if (new Date().getMinutes() % 15 < 5) {
+      ctx.waitUntil(pullNews(env).catch(() => {}));
+    }
   },
   async fetch(req: Request, env: Env, ctx: ExecutionContext) {
     const url = new URL(req.url);
     if (url.protocol === 'http:' && url.hostname !== 'localhost' && !env.DEV) { url.protocol = 'https:'; return Response.redirect(url.toString(), 301); }
     if (url.pathname === '/api/live') return secure(await live(env));
+    if (url.pathname === '/api/news') return secure(await news(env, url, ctx));
     if (url.pathname !== '/api/today') return secure(await env.ASSETS.fetch(req));
     return secure(await today(req, url, ctx));
   },
 };
+
+const NEWS_SRC = 'Google News RSS (NCU + Taoyuan)';
+
+interface NewsStore { updatedAt: string; items: NewsItem[] }
+
+async function pullNews(env: Env): Promise<NewsStore> {
+  const nowIso = new Date().toISOString();
+  const prevRaw = await env.LIVE.get('news_db');
+  const prev: NewsItem[] = prevRaw ? (JSON.parse(prevRaw) as NewsStore).items ?? [] : [];
+  const fetched = await Promise.allSettled(
+    NEWS_FEEDS.map(async f => {
+      const r = await fetch(f.url, { signal: AbortSignal.timeout(12000), headers: { 'user-agent': 'ncu-campus-twin/0.6' } });
+      if (!r.ok) throw new Error(`${r.status}`);
+      return parseGoogleNewsRss(await r.text(), f.defaultScope, f.lang, nowIso, 25);
+    }),
+  );
+  const incoming = fetched.flatMap(res => (res.status === 'fulfilled' ? res.value : []));
+  const merged = mergeNewsCorpus(prev, incoming, 300);
+  const store: NewsStore = { updatedAt: nowIso, items: merged };
+  if (merged.length) await env.LIVE.put('news_db', JSON.stringify(store));
+  return store;
+}
+
+async function news(env: Env, url: URL, ctx: ExecutionContext): Promise<Response> {
+  const raw = await env.LIVE.get('news_db', { cacheTtl: 120 });
+  let store: NewsStore | null = raw ? (JSON.parse(raw) as NewsStore) : null;
+  const stale = !store || !store.items.length || Date.now() - Date.parse(store.updatedAt) > 15 * 60e3;
+  if (!store || !store.items.length) {
+    try { store = await pullNews(env); } catch { store = { updatedAt: new Date().toISOString(), items: [] }; }
+  } else if (stale) {
+    ctx.waitUntil(pullNews(env).catch(() => {}));
+  }
+
+  const fmt = url.searchParams.get('format');
+  if (fmt === 'jsonl') {
+    return new Response(toJsonl(store.items), {
+      headers: {
+        'content-type': 'application/x-ndjson; charset=utf-8',
+        'content-disposition': 'attachment; filename="ncu-taoyuan-news.jsonl"',
+        'cache-control': 'public, max-age=120',
+      },
+    });
+  }
+  if (fmt === 'csv') {
+    return new Response(toCsv(store.items), {
+      headers: {
+        'content-type': 'text/csv; charset=utf-8',
+        'content-disposition': 'attachment; filename="ncu-taoyuan-news.csv"',
+        'cache-control': 'public, max-age=120',
+      },
+    });
+  }
+
+  const payload: NewsPayload = {
+    meta: { source: NEWS_SRC, tier: store.items.length ? 'live' : 'unavailable', asOf: store.items.length ? store.updatedAt : null },
+    items: store.items,
+    stats: summarizeNews(store.items),
+  };
+  return new Response(JSON.stringify(payload), {
+    headers: { 'content-type': 'application/json; charset=utf-8', 'cache-control': 'public, max-age=120' },
+  });
+}
 
 const ROAD_SRC = 'Freeway Bureau VD (MOTC)';
 
