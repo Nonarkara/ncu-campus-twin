@@ -1,0 +1,9 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "ncu-campus-twin",
+  "main": "worker/index.ts",
+  "compatibility_date": "2026-11-01",
+  "assets": { "directory": "dist", "binding": "ASSETS", "run_worker_first": ["/api/*"] },
+  "routes": [{ "pattern": "ncu.nonarkara.org", "custom_domain": true }],
+  "workers_dev": true
+}
