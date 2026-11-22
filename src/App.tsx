@@ -8,20 +8,23 @@ type L = 'en' | 'zh';
 const T = {
   today: ['Today', '今日'], power: ['Power', '能源'], move: ['Move', '交通'],
   needs: ['need a decision today', '項需今日決策'], none: ['Nothing needs a decision. Next check in 5 min.', '目前無需決策事項，5 分鐘後再檢查。'],
-  steady: ['Steady', '常態'], off: ['Not connected yet', '尚未串接'], by: ['by', '於'], owner: ['Owner', '負責'],
+  steady: ['Steady', '常態'], off: ['feeds not connected yet', '項資料尚未串接'], by: ['by', '於'], owner: ['Owner', '負責'],
   rule: ['Rule', '規則'], loading: ['Loading open feeds…', '讀取開放資料中…'], err: ['Feeds unreachable. Nothing shown is guessed.', '資料源無法連線，不顯示任何推估值。'],
 } as const;
 const tr = (k: keyof typeof T, l: L) => T[k][l === 'en' ? 0 : 1];
 const pick = (p: readonly [string, string], l: L) => (l === 'en' ? p[0] : p[1]);
 
-function age(iso: string | null) {
+const TIER = { live: '即時', forecast: '預報', modeled: '模式', schedule: '班表', unavailable: '無資料' } as Record<string, string>;
+function age(iso: string | null, l: L) {
   if (!iso) return '—';
   const m = Math.round((Date.now() - Date.parse(iso)) / 60000);
   if (Number.isNaN(m)) return iso;
-  if (m < 1) return 'now'; if (m < 120) return `${m} min ago`; if (m < 2880) return `${Math.round(m / 60)} h ago`;
+  if (m < 1) return l === 'en' ? 'now' : '剛剛';
+  if (m < 120) return l === 'en' ? `${m} min ago` : `${m} 分鐘前`;
+  if (m < 2880) return l === 'en' ? `${Math.round(m / 60)} h ago` : `${Math.round(m / 60)} 小時前`;
   return iso.slice(0, 10);
 }
-const MetaLine = ({ m }: { m: Meta }) => <span>{m.source} · {m.tier} · {age(m.asOf)}</span>;
+const MetaLine = ({ m, l }: { m: Meta; l: L }) => <span className="nb">{m.source} · {l === 'en' ? m.tier : TIER[m.tier] ?? m.tier} · {age(m.asOf, l)}</span>;
 
 function TodayLens({ l }: { l: L }) {
   const [t, setT] = useState<Today | null>(null);
@@ -42,12 +45,13 @@ function TodayLens({ l }: { l: L }) {
       <li key={i.id} className={`item ${i.level}`}>
         <h3>{pick(i.title, l)}</h3>
         <p>{pick(i.detail, l)}</p>
-        <p className="meta">{tr('owner', l)}: {i.owner}{i.by && <> · {tr('by', l)} {i.by}</>} · {tr('rule', l)}: {i.rule}<br /><MetaLine m={i.meta} /></p>
+        <p className="meta">{tr('owner', l)}: {i.owner}{i.by && <> · {tr('by', l)} {i.by}</>} · {tr('rule', l)}: {i.rule}<br /><MetaLine m={i.meta} l={l} /></p>
       </li>))}</ul>}
     <h2 className="h">{tr('steady', l)}</h2>
-    <dl className="rows">{t.steady.map(s => <div key={s.id}><dt>{pick(s.label, l)}</dt><dd>{s.value}<small><MetaLine m={s.meta} /></small></dd></div>)}</dl>
-    <h2 className="h">{tr('off', l)}</h2>
-    <ul className="off">{t.slots.map(s => <li key={s.id}>{pick(s.label, l)}<small>{l === 'en' ? 'needs' : '需'} {s.needs} · {s.owner}</small></li>)}</ul>
+    <ul className="steady">{t.steady.map(s => <li key={s.id}><span>{pick(s.label, l)}</span> <b>{pick(s.value, l)}</b><small><MetaLine m={s.meta} l={l} /></small></li>)}</ul>
+    <details className="off"><summary>{t.slots.length} {tr('off', l)} ›</summary>
+      <ul>{t.slots.map(s => <li key={s.id}>{pick(s.label, l)}<small>{l === 'en' ? 'needs' : '需'} {s.needs} · {s.owner}</small></li>)}</ul></details>
+    <a className="tomap" href="#map">{l === 'en' ? 'Campus map ↓' : '校園地圖 ↓'}</a>
   </>;
 }
 
@@ -62,8 +66,8 @@ function PowerLens({ l }: { l: L }) {
   const max = named[0]?.kwp ?? 1;
   const a = s.meta.assumptions;
   return <>
-    <div className="hero"><b>{mw(s.total_kwp_low)}–{mw(s.total_kwp)}</b>
-      <p>{l === 'en' ? 'MWp rooftop solar screened on NCU roofs' : 'MWp 校內屋頂太陽光電篩選潛力'}</p></div>
+    <div className="hero"><b>{mw(s.total_kwp_low)}–{mw(s.total_kwp)} MWp</b></div>
+    <p>{l === 'en' ? 'Rooftop solar NCU\'s own roofs could host (screening estimate).' : '中大自有屋頂可容納之太陽光電（篩選估算）。'}</p>
     <p>{l === 'en'
       ? <>The microgrid plan installs <b>250 kWp</b>, {pct(s.total_kwp)}–{pct(s.total_kwp_low)}% of this ceiling. {s.buildings.length} roofs over {a.minAreaM2} m² counted.</>
       : <>微電網計畫設置 <b>250 kWp</b>，約為此上限的 {pct(s.total_kwp)}–{pct(s.total_kwp_low)}%。計入 {s.buildings.length} 棟 {a.minAreaM2} m² 以上屋頂。</>}</p>
@@ -77,7 +81,7 @@ function PowerLens({ l }: { l: L }) {
       <div><dt>{l === 'en' ? 'Sun, 2025' : '2025 日照'}</dt><dd>{a.ghi_kwh_m2_yr} kWh/m² · PR {a.pr}</dd></div>
       <div><dt>{l === 'en' ? 'Campus load' : '校園用電'}</dt><dd>{l === 'en' ? 'not public, needs 總務處 meter data' : '未公開，需總務處電表資料'}</dd></div>
     </dl>
-    <p className="note">{a.note} <MetaLine m={{ source: s.meta.source, tier: s.meta.tier, asOf: s.meta.fetchedAt }} /></p>
+    <p className="note">{a.note} <MetaLine m={{ source: s.meta.source, tier: s.meta.tier, asOf: s.meta.fetchedAt }} l={l} /></p>
   </>;
 }
 
@@ -86,19 +90,23 @@ function MoveLens({ l }: { l: L }) {
   const { hm, weekend } = taipei(new Date());
   const tt = timetable as any;
   const block = (k: 'toTaipei' | 'toHSR' | 'toCampus', col: 1 | 2, label: [string, string]) => {
-    const rows: Row[] = upcoming(tt[k].rows, col, hm, weekend).slice(0, 4);
-    return <><h2 className="h">{pick(label, l)}</h2>
-      {rows.length ? <dl className="rows">{rows.map((r, i) => <div key={i}><dt>{r[0]}</dt><dd>{r[col]}</dd></div>)}</dl>
-        : <p className="meta">{l === 'en' ? 'No more scheduled trips today.' : '今日已無班次。'}</p>}</>;
+    const rows: Row[] = upcoming(tt[k].rows, col, hm, weekend).slice(0, 5);
+    const multi = new Set(rows.map(r => r[0])).size > 1;
+    return <li><span>{pick(label, l)}</span>
+      <b>{rows.length ? rows.map((r, i) => <span key={i} className="t">{r[col]}{multi && <sub>{r[0]}</sub>}</span>) : (l === 'en' ? 'none left today' : '今日已無班次')}</b></li>;
   };
   const left = upcoming(tt.toTaipei.rows, 2, hm, weekend).length;
   return <>
     <div className="hero"><b className={left ? '' : 'act'}>{left}</b>
       <p>{l === 'en' ? 'buses to Taipei still stop at NCU today (9025A)' : '班 9025A 今日仍停靠中大往臺北'}</p></div>
-    {block('toTaipei', 2, ['9025A to Taipei, at the NCU stop', '9025A 往臺北（中大站約略時間）'])}
-    {block('toHSR', 1, ['172 / 173 to HSR Taoyuan, departs', '172 / 173 往高鐵桃園站 發車'])}
-    {block('toCampus', 2, ['132 / 133 from Zhongli, arrives about', '132 / 133 自中壢 約抵達'])}
-    <p className="note">{tt.caveats.join(' ')} {tt.source}. {weekend ? (l === 'en' ? 'Weekend schedule.' : '假日班表。') : (l === 'en' ? 'Weekday schedule.' : '平日班表。')}</p>
+    <ul className="steady">
+    {block('toTaipei', 2, ['9025A → Taipei, at NCU stop', '9025A 往臺北，中大站約'])}
+    {block('toHSR', 1, ['172 / 173 → HSR Taoyuan, departs', '172 / 173 往高鐵桃園站 發車'])}
+    {block('toCampus', 2, ['132 / 133 Zhongli → NCU, about', '132 / 133 中壢 → 中大 約'])}
+    </ul>
+    <p className="note">{l === 'en'
+      ? <>{weekend ? 'Weekend' : 'Weekday'} schedule. {tt.caveats.join(' ')} {tt.source}.</>
+      : <>{weekend ? '假日' : '平日'}班表。中大站時間為客運預估，即時位置需 TDX。172/173 為非試辦班表，172A 試辦至 2026-03-31，其後狀態未確認。資料：中大總務處事務組對外交通資訊（115.02.26）。</>}</p>
   </>;
 }
 

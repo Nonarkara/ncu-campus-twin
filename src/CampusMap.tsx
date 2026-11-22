@@ -30,11 +30,13 @@ export function CampusMap({ lens, l }: { lens: Lens; l: 'en' | 'zh' }) {
   const [hover, setHover] = useState<string | null>(null);
 
   useEffect(() => {
-    const m = new MLMapCtor({ container: el.current!, style, bounds: BOUNDS, fitBoundsOptions: { padding: 16 },
+    const m = new MLMapCtor({ container: el.current!, style, bounds: BOUNDS, fitBoundsOptions: { padding: 24 },
       minZoom: 14, maxZoom: 19, maxBounds: [121.170, 24.955, 121.212, 24.982], renderWorldCopies: false,
       attributionControl: { compact: true }, dragRotate: false, pitchWithRotate: false });
     m.touchZoomRotate.disableRotation();
     map.current = m;
+    let w = el.current!.clientWidth;
+    m.on('resize', () => { const nw = el.current!.clientWidth; if (nw !== w) { w = nw; m.fitBounds(BOUNDS, { padding: 24, animate: false }); } });
     m.on('load', async () => {
       const d: any = await fetch('/data/campus.json').then(r => r.json());
       m.addSource('ctx', { type: 'geojson', data: d.context });
@@ -70,7 +72,7 @@ export function CampusMap({ lens, l }: { lens: Lens; l: 'en' | 'zh' }) {
       : INK + '0.14)');
     const onCampus = ['in', ['get', 'name'], ['literal', ON_CAMPUS_STOPS]] as ExpressionSpecification;
     m.setPaintProperty('stops', 'circle-radius', lens === 'move' ? ['case', onCampus, 6, 3] as ExpressionSpecification : 3);
-    m.setPaintProperty('stops', 'circle-color', lens === 'move' ? ['case', onCampus, AMBER, '#0a0e14'] as ExpressionSpecification : '#0a0e14');
+    m.setPaintProperty('stops', 'circle-color', lens === 'move' ? ['case', onCampus, INK + '0.9)', '#0a0e14'] as ExpressionSpecification : '#0a0e14');
     m.setLayoutProperty('photo', 'visibility', photo ? 'visible' : 'none');
   }, [lens, ready, photo]);
 
@@ -78,9 +80,9 @@ export function CampusMap({ lens, l }: { lens: Lens; l: 'en' | 'zh' }) {
   const legend = h
     ? `${(l === 'en' ? h.name_en ?? h.name : h.name) ?? (l === 'en' ? 'Unnamed building' : '未命名建物')} · ${h.area_m2} m²${h.kwp ? ` · ${Math.round(h.kwp)} kWp` : ''}${h.levels ? ` · ${h.levels}F` : ''}`
     : lens === 'power' ? (l === 'en' ? 'Amber = more rooftop kWp (high case)' : '琥珀色越深 = 屋頂潛力越高')
-    : lens === 'move' ? (l === 'en' ? 'Amber = NCU bus stops (OSM)' : '琥珀色 = 校內公車站（OSM）')
+    : lens === 'move' ? (l === 'en' ? 'Filled = NCU bus stops (OSM)' : '實心 = 校內公車站（OSM）')
     : (l === 'en' ? 'OSM buildings · dashed = campus boundary' : 'OSM 建物 · 虛線 = 校界');
-  return <div className="map">
+  return <div className="map" id="map">
     <div ref={el} style={{ position: 'absolute', inset: 0 }} />
     <div className="mapctl">
       <button aria-pressed={!photo} onClick={() => setPhoto(false)}>{l === 'en' ? 'Plan' : '平面'}</button>

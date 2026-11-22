@@ -29,7 +29,7 @@ button { font: inherit; color: inherit; background: none; border: 0; cursor: poi
 
 .tabs { display: flex; gap: 16px; border-bottom: 1px solid var(--line); }
 .tabs button { padding: 8px 0 7px; min-height: 32px; color: var(--dim); border-bottom: 2px solid transparent; }
-.tabs button[aria-selected='true'] { color: var(--ink); border-bottom-color: var(--amber); font-weight: 500; }
+.tabs button[aria-selected='true'] { color: var(--ink); border-bottom-color: var(--ink); font-weight: 500; }
 
 .hero { display: flex; align-items: baseline; gap: 12px; padding: 16px 0 12px; }
 .hero b { font-size: var(--t-hero); font-weight: 500; line-height: 1; white-space: nowrap; }
@@ -50,15 +50,14 @@ button { font: inherit; color: inherit; background: none; border: 0; cursor: poi
 .rows dt, .rows dd { padding: 6px 0; border-top: 1px solid var(--line); margin: 0; }
 .rows dt { color: var(--dim); }
 .rows dd small { display: block; font-size: var(--t-micro); color: var(--dim); }
-.off { list-style: none; padding: 0; color: var(--dim); }
-.off li { padding: 6px 0; border-top: 1px solid var(--line); }
+.off ul li { padding: 6px 0; border-top: 1px solid var(--line); }
 .off small { display: block; font-size: var(--t-micro); }
 
 .note { font-size: var(--t-micro); color: var(--dim); padding-top: 16px; max-width: 60ch; }
 .note a { color: var(--dim); }
 .bars { list-style: none; padding: 0; }
 .bars li { display: grid; grid-template-columns: 1fr auto; gap: 8px; padding: 5px 0; border-top: 1px solid var(--line); position: relative; }
-.bars li i { position: absolute; left: 0; bottom: 0; height: 2px; background: var(--amber); }
+.bars li i { position: absolute; left: 0; bottom: 0; height: 2px; background: var(--dim); }
 
 .mapctl { position: absolute; top: 12px; right: 12px; display: flex; gap: 1px; background: var(--line); }
 .mapctl button { background: var(--bg); padding: 6px 10px; min-height: 32px; font-size: var(--t-micro); color: var(--dim); }
@@ -66,3 +65,24 @@ button { font: inherit; color: inherit; background: none; border: 0; cursor: poi
 .legend { position: absolute; left: 12px; bottom: 12px; font-size: var(--t-micro); color: var(--dim); background: var(--bg); padding: 4px 8px; }
 .maplibregl-ctrl-attrib { background: rgba(10, 14, 20, .8) !important; font-size: var(--t-micro); }
 .maplibregl-ctrl-attrib a { color: var(--dim) !important; }
+
+.nb { white-space: nowrap; }
+.steady { list-style: none; padding: 0; }
+.steady li { padding: 6px 0; border-top: 1px solid var(--line); }
+.steady li > span { color: var(--dim); margin-right: 8px; }
+.steady b { font-weight: 500; }
+.steady small { display: block; font-size: var(--t-micro); color: var(--dim); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.steady .t { margin-right: 12px; white-space: nowrap; }
+.steady sub { font-size: var(--t-micro); color: var(--dim); vertical-align: baseline; margin-left: 2px; }
+details.off { padding-top: 12px; color: var(--dim); }
+details.off summary { cursor: pointer; list-style: none; min-height: 32px; display: flex; align-items: center; border-top: 1px solid var(--line); }
+details.off summary::-webkit-details-marker { display: none; }
+details.off ul { list-style: none; padding: 0; }
+.tomap { display: inline-flex; align-items: center; min-height: 44px; color: var(--dim); font-size: var(--t-micro); }
+@media (min-width: 900px) { .tomap { display: none; } }
+@media (hover: hover) and (pointer: fine) {
+  .mapctl button { min-height: 24px; padding: 4px 8px; }
+  .tabs button { min-height: 24px; padding: 4px 0 3px; }
+  .lang { min-height: 24px; }
+}
+@media (pointer: coarse) { .lang { min-height: 44px; } }

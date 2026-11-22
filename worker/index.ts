@@ -45,10 +45,35 @@ async function air(): Promise<Feed<Air>> {
   } catch { return { data: null, meta: { source, tier: 'unavailable', asOf: null } }; }
 }
 
+const SECURITY: Record<string, string> = {
+  'strict-transport-security': 'max-age=31536000; includeSubDomains',
+  'x-content-type-options': 'nosniff',
+  'referrer-policy': 'strict-origin-when-cross-origin',
+  'x-frame-options': 'DENY',
+  'permissions-policy': 'camera=(), microphone=(), geolocation=()',
+  'content-security-policy': [
+    "default-src 'self'", "script-src 'self'", "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com",
+    "font-src https://fonts.gstatic.com", "img-src 'self' data: blob: https://wmts.nlsc.gov.tw",
+    "connect-src 'self' https://wmts.nlsc.gov.tw", "worker-src 'self' blob:", "frame-ancestors 'none'", "base-uri 'none'", "form-action 'none'",
+  ].join('; '),
+};
+function secure(res: Response) {
+  const r = new Response(res.body, res);
+  for (const [k, v] of Object.entries(SECURITY)) r.headers.set(k, v);
+  return r;
+}
+
 export default {
   async fetch(req: Request, env: Env, ctx: ExecutionContext) {
     const url = new URL(req.url);
-    if (url.pathname !== '/api/today') return env.ASSETS.fetch(req);
+    if (url.protocol === 'http:' && url.hostname !== 'localhost') { url.protocol = 'https:'; return Response.redirect(url.toString(), 301); }
+    if (url.pathname !== '/api/today') return secure(await env.ASSETS.fetch(req));
+    return secure(await today(req, url, ctx));
+  },
+};
+
+async function today(req: Request, url: URL, ctx: ExecutionContext): Promise<Response> {
+  {
     const cache = (caches as unknown as { default: Cache }).default;
     const key = new Request(url.origin + '/api/today');
     const hit = await cache.match(key);
@@ -58,5 +83,5 @@ export default {
     const res = new Response(body, { headers: { 'content-type': 'application/json', 'cache-control': 'public, max-age=300' } });
     ctx.waitUntil(cache.put(key, res.clone()));
     return res;
-  },
-};
+  }
+}
