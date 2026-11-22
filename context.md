@@ -26,3 +26,4 @@
 - **Freeway feed status (2026-11-22 13:15):** the */5 cron runs, but every pull from Cloudflare returns 522: Cloudflare's network cannot reach tisvcloud.freeway.gov.tw. Requests from a Taiwanese ISP work fine. `/api/live` hides readings older than 30 min and exposes `lastError`. Two ways to make it live:
   - (a) a TDX key (official API), or
   - (b) a 5-min relay on Dr Non's always-on Mac that runs `wrangler kv key put road`.
+- **Freeway relay (live since 2026-11-22 13:18):** the launchd job `com.drnon.ncu-road-relay` (~/Library/LaunchAgents) runs `pipeline/relay-road.mjs` every 300 s on this Mac and writes KV `road`. Log: `var/relay.log`. When the Mac sleeps, the site hides the data after 30 min. The Worker cron still tries and records its 522 in `road_err`.
