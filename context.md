@@ -20,8 +20,7 @@
 - **Find lens**: `public/data/directory.json` from `var/raw/directory/directory.json`, cooked by `pipeline/directory.mjs`.
   - 169 official entries, each linked to its page.
   - Entries link to an OSM footprint only by exact name or the hand-checked ALIAS table (44 linked).
-- **Heights**: OSM has floors for only 4 campus buildings, Overture has 0, and Google 2.5D does not cover Taiwan. Only those 4 are extruded.
-  - Measured heights (`BUILD_H`, with a source code per building) are in the NLSC 三維建物模型. A small area can be requested online by a registered user at https://3dmaps.nlsc.gov.tw. That application needs Dr Non.
+- **Heights (upgraded 2026-11-22):** Harvested **97 / 109** official measured building heights (`BUILD_H`, `BUILD_NO`, `MDATE`) directly from Taiwan NLSC's public Taoyuan Individual Building 3D Tiles (`https://3dtiles.nlsc.gov.tw/building/tiles3d/37/tileset.json`, no login required) via `npm run heights` (`pipeline/heights.mjs`). 1 additional building uses OSM `building:levels × 3.5 m` (modeled); 11 unmeasured small structures remain honestly flat (`height_m: null`), never guessed. Max measured campus height: Female Dorm 14 (`女十四舍`) at `42.6 m (12F)`.
 - Not published anywhere: dorm bed counts, current car/scooter capacity, restaurant count.
 - **Freeway feed status (2026-11-22 13:15):** the */5 cron runs, but every pull from Cloudflare returns 522: Cloudflare's network cannot reach tisvcloud.freeway.gov.tw. Requests from a Taiwanese ISP work fine. `/api/live` hides readings older than 30 min and exposes `lastError`. Two ways to make it live:
   - (a) a TDX key (official API), or

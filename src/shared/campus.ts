@@ -9,6 +9,9 @@ export interface BuildingProps {
   area_m2: number;
   levels: number | null;
   height_m: number | null;
+  height_source?: string | null;
+  height_tier?: 'observed' | 'modeled' | null;
+  height_mdate?: string | null;
   kwp: number;
   kwh_yr: number;
 }
@@ -26,7 +29,12 @@ export interface StopFeature {
 }
 
 export interface CampusData {
-  meta: { source: string; tier: string; fetchedAt: string };
+  meta: {
+    source: string;
+    tier: string;
+    fetchedAt: string;
+    heights?: { source: string; tier: string; fetchedAt: string; matched_nlsc: number; matched_osm_floors: number; unknown: number };
+  };
   campus: any;
   buildings: { type: 'FeatureCollection'; features: BuildingFeature[] };
   context: any;

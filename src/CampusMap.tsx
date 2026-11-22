@@ -177,9 +177,13 @@ export function CampusMap({
         },
       });
 
-      // 3D: only buildings with stated floors are extruded; the rest stay footprints
+      // 3D: NLSC measured heights (BUILD_H) + stated OSM floors extruded; unmeasured buildings stay flat
       m.addLayer({ id: 'bld-3d', type: 'fill-extrusion', source: 'bld', filter: ['!=', ['get', 'height_m'], null], layout: { visibility: 'none' },
-        paint: { 'fill-extrusion-color': '#9aa4ae', 'fill-extrusion-height': ['get', 'height_m'], 'fill-extrusion-opacity': 0.9 } });
+        paint: {
+          'fill-extrusion-color': ['interpolate', ['linear'], ['get', 'height_m'], 4, '#394552', 18, '#6e7e8f', 42, '#c8d2dc'],
+          'fill-extrusion-height': ['get', 'height_m'],
+          'fill-extrusion-opacity': 0.92,
+        } });
       m.addLayer({ id: 'bio', type: 'circle', source: 'bio', layout: { visibility: 'none' },
         paint: { 'circle-radius': 3.5, 'circle-color': '#0a0e14', 'circle-stroke-color': INK + '0.9)', 'circle-stroke-width': 1.5 } });
       m.addLayer({ id: 'docks', type: 'circle', source: 'docks', layout: { visibility: 'none' },
@@ -235,27 +239,29 @@ export function CampusMap({
         m.on('click', id, (e: any) => { const f = e.features?.[0]; if (f) setHoverText(JSON.stringify({ kind: id, p: f.properties })); });
       }
       let hovered: string | null = null;
-      m.on('mousemove', 'bld', (e: any) => {
-        m.getCanvas().style.cursor = 'pointer';
-        const f = e.features?.[0];
-        if (!f) return;
-        if (hovered && hovered !== f.properties.id) {
-          m.setFeatureState({ source: 'bld', id: hovered }, { hover: false });
-        }
-        hovered = f.properties.id;
-        m.setFeatureState({ source: 'bld', id: hovered! }, { hover: true });
-        setHoverText(JSON.stringify({ kind: 'bld', p: f.properties }));
-      });
-      m.on('mouseleave', 'bld', () => {
-        m.getCanvas().style.cursor = '';
-        if (hovered) m.setFeatureState({ source: 'bld', id: hovered }, { hover: false });
-        hovered = null;
-        setHoverText(null);
-      });
-      m.on('click', 'bld', (e: any) => {
-        const f = e.features?.[0];
-        if (f?.properties?.id) onSelectBuildingRef.current(f.properties.id);
-      });
+      for (const layerId of ['bld', 'bld-3d']) {
+        m.on('mousemove', layerId, (e: any) => {
+          m.getCanvas().style.cursor = 'pointer';
+          const f = e.features?.[0];
+          if (!f) return;
+          if (hovered && hovered !== f.properties.id) {
+            m.setFeatureState({ source: 'bld', id: hovered }, { hover: false });
+          }
+          hovered = f.properties.id;
+          m.setFeatureState({ source: 'bld', id: hovered! }, { hover: true });
+          setHoverText(JSON.stringify({ kind: 'bld', p: f.properties }));
+        });
+        m.on('mouseleave', layerId, () => {
+          m.getCanvas().style.cursor = '';
+          if (hovered) m.setFeatureState({ source: 'bld', id: hovered }, { hover: false });
+          hovered = null;
+          setHoverText(null);
+        });
+        m.on('click', layerId, (e: any) => {
+          const f = e.features?.[0];
+          if (f?.properties?.id) onSelectBuildingRef.current(f.properties.id);
+        });
+      }
 
       m.on('mouseenter', 'stops', () => { m.getCanvas().style.cursor = 'pointer'; });
       m.on('mouseleave', 'stops', () => { m.getCanvas().style.cursor = ''; setHoverText(null); });
@@ -332,6 +338,12 @@ export function CampusMap({
       ['boolean', ['feature-state', 'hover'], false], 2,
       isAnchor, 1.1,
       0.75,
+    ] as ExpressionSpecification);
+
+    m.setPaintProperty('bld-3d', 'fill-extrusion-color', [
+      'case',
+      isSelected, AMBER,
+      ['interpolate', ['linear'], ['get', 'height_m'], 4, '#394552', 18, '#6e7e8f', 42, '#c8d2dc'],
     ] as ExpressionSpecification);
 
     // Bus stops
@@ -469,7 +481,8 @@ export function CampusMap({
       const anchor = CAMPUS_ANCHORS[p.id];
       const name = (l === 'en' ? p.name_en ?? p.name : p.name) ?? (l === 'en' ? 'Unnamed building' : '未命名建物');
       const role = anchor ? ` · ${l === 'en' ? anchor.tag[0] : anchor.tag[1]}` : '';
-      legend = `${name}${role} · ${p.area_m2} m²${p.kwp ? ` · ${Math.round(p.kwp)} kWp` : ''}`;
+      const ht = p.height_m ? ` · ${p.height_m} m${p.levels ? ` (${p.levels}F)` : ''}` : '';
+      legend = `${name}${role} · ${p.area_m2} m²${ht}${p.kwp ? ` · ${Math.round(p.kwp)} kWp` : ''}`;
     }
   } else if (lens === 'power') {
     legend = portfolioIds.size
@@ -483,8 +496,8 @@ export function CampusMap({
     legend = l === 'en' ? 'Tap “Map ›” in the directory to locate a building · dashed = OSM boundary' : '點名錄中的「地圖 ›」定位建物 · 虛線 = OSM 校界';
   } else if (lens === 'twin') {
     legend = l === 'en'
-      ? 'Brighter = greener (Sentinel-2) · amber = NDVI down ≥0.15 vs a year ago · drag to rotate · 3D only where floors are stated'
-      : '越亮越綠（Sentinel-2）・琥珀 = NDVI 較去年下降 ≥0.15・拖曳旋轉・僅有樓層資料者立體呈現';
+      ? 'Brighter = greener (Sentinel-2) · amber = NDVI down ≥0.15 YoY · drag to rotate · 3D = NLSC measured BUILD_H'
+      : '越亮越綠（Sentinel-2）・琥珀 = NDVI 較去年降 ≥0.15・拖曳旋轉・3D 採國土測繪實測高度';
   } else if (lens === 'move') {
     legend = selectedStopName
       ? (l === 'en' ? `${selectedStopName} · dashed ring = 300 m (~4 min walk)` : `${selectedStopName} · 虛線圓 = 300 公尺（步行約 4 分）`)

@@ -71,7 +71,13 @@ export function TwinLens({ eco, ndvi, live, campus, dir, layers, onToggle, onFoc
     return { gained, lost, steady, tot, pctGained: Math.round((gained / tot) * 100), pctLost: Math.round((lost / tot) * 100) };
   })();
   const blds = campus?.buildings.features ?? [];
-  const tall = blds.filter(b => b.properties.height_m !== null).length;
+  const measured = blds.filter(b => b.properties.height_tier === 'observed').length;
+  const modeledH = blds.filter(b => b.properties.height_tier === 'modeled').length;
+  const flatBlds = blds.filter(b => b.properties.height_m === null).length;
+  const maxH = blds.reduce((m, b) => Math.max(m, b.properties.height_m ?? 0), 0);
+  const hMeta = campus?.meta.heights
+    ? { source: campus.meta.heights.source, tier: campus.meta.heights.tier, asOf: campus.meta.heights.fetchedAt }
+    : campus ? { source: 'OpenStreetMap', tier: campus.meta.tier, asOf: campus.meta.fetchedAt } : null;
   const ecoMeta = eco ? { source: 'OpenStreetMap', tier: 'observed', asOf: eco.meta.fetchedAt ?? null } : null;
   const main = live?.road.data.filter(f => f.kind === 'main') ?? [];
   const exits = live?.road.data.filter(f => f.kind === 'exit') ?? [];
@@ -81,7 +87,6 @@ export function TwinLens({ eco, ndvi, live, campus, dir, layers, onToggle, onFoc
     .filter(e => e.capacity?.unit === 'seats' && !(e.note ?? '').startsWith('STALE')).sort((a, b) => b.capacity!.value - a.capacity!.value);
   const bioMeta = eco ? { source: 'GBIF', tier: 'observed', asOf: eco.meta.fetchedAt ?? null } : null;
   const dirMeta = dir ? { source: 'ncu.edu.tw', tier: 'observed', asOf: dir.meta.asOf } : null;
-  const bldMeta = campus ? { source: 'OpenStreetMap', tier: campus.meta.tier, asOf: campus.meta.fetchedAt } : null;
   const classes = eco ? Object.entries(eco.bio.byClass).filter(([k]) => CLASS[k]).sort((a, b) => b[1] - a[1]).slice(0, 4) : [];
 
   return (
@@ -189,13 +194,18 @@ export function TwinLens({ eco, ndvi, live, campus, dir, layers, onToggle, onFoc
             <small>{l === 'en' ? 'No current official car or scooter count is published (last: 2014–2020); live counts need 總務處 gate data.' : '現行汽機車格數未公開（最近公布為 2014–2020 年），即時數需總務處柵欄資料。'}<br /><M m={ecoMeta} l={l} /></small>
           </li>
         )}
-        {campus && bldMeta && (
+        {campus && hMeta && (
           <li>
-            <span>{l === 'en' ? 'Built volume' : '建物量體'}</span>
-            <b>{blds.length} {l === 'en' ? 'buildings' : '棟'} · {l === 'en' ? `${tall} with stated floors drawn in 3D` : `${tall} 棟有樓層資料以立體呈現`}</b>
+            <span>{l === 'en' ? 'Built volume (3D)' : '建物量體（3D）'}</span>
+            <b>
+              {blds.length} {l === 'en' ? 'buildings' : '棟'} ·{' '}
+              {l === 'en'
+                ? `${measured} NLSC measured${modeledH ? ` + ${modeledH} OSM floors` : ''} · max ${maxH.toFixed(1)} m`
+                : `${measured} 棟國土測繪實測${modeledH ? ` + ${modeledH} 棟 OSM 樓層` : ''}・最高 ${maxH.toFixed(1)} m`}
+            </b>
             <small>{l === 'en'
-              ? 'Height = stated floors × 3.5 m (modelled). Others are drawn as footprints, never guessed. Measured heights: NLSC 3D building model (by application).'
-              : '高度 = 標示樓層 × 3.5 m（模式推算）。其餘僅畫平面輪廓，不推估高度。實測高度需向國土測繪中心申請三維建物模型。'}<br /><M m={bldMeta} l={l} /></small>
+              ? `Measured BUILD_H from NLSC Taoyuan 3D Tiles matched inside OSM footprints; ${flatBlds} unmeasured footprints stay flat, never guessed.`
+              : `採國土測繪中心桃園市分棟三維建物實測高度（BUILD_H）套合 OSM 輪廓；其餘 ${flatBlds} 棟無實測值維持平面，絕不推估。`}<br /><M m={hMeta} l={l} /></small>
           </li>
         )}
       </ul>

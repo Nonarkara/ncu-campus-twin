@@ -123,7 +123,18 @@ function BuildingInspector({
           <dt>{l === 'en' ? 'Footprint / height' : '投影面積／高度'}</dt>
           <dd>
             {p.area_m2.toLocaleString()} m² ·{' '}
-            {p.levels ? `${p.levels}F (${p.height_m} m)` : (l === 'en' ? 'height unknown in OSM' : 'OSM 無樓高資料')}
+            {p.height_m !== null
+              ? <>
+                  {p.height_m} m{p.levels ? ` (${p.levels}F)` : ''}
+                  <small>
+                    {p.height_tier === 'observed'
+                      ? (l === 'en'
+                        ? `NLSC 3D measured${p.height_mdate ? ` · ${p.height_mdate.slice(0, 4)}-${p.height_mdate.slice(4)}` : ''}`
+                        : `國土測繪 3D 實測${p.height_mdate ? `・${p.height_mdate.slice(0, 4)}-${p.height_mdate.slice(4)}` : ''}`)
+                      : (l === 'en' ? 'OSM floors × 3.5 m (modeled)' : 'OSM 樓層 × 3.5 m（模式）')}
+                  </small>
+                </>
+              : (l === 'en' ? 'height unknown (drawn flat)' : '無實測高度（維持平面）')}
           </dd>
         </div>
         {p.kwp > 0 && (

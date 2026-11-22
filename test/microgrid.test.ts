@@ -79,4 +79,15 @@ describe('campus spatial anchors', () => {
     expect(haversineMeters([121.19, 24.968], [121.19, 24.968])).toBe(0);
     expect(minutesUntil('11:45', '12:13')).toBe(28);
   });
+
+  it('NLSC measured 3D heights cover >=90 campus buildings with explicit observed provenance, never guessing nulls', () => {
+    const observed = campus.buildings.features.filter(f => f.properties.height_tier === 'observed');
+    expect(observed.length).toBeGreaterThanOrEqual(90);
+    for (const f of observed) {
+      expect(f.properties.height_m).toBeGreaterThan(0);
+      expect(f.properties.height_source).toContain('NLSC');
+    }
+    const flat = campus.buildings.features.filter(f => f.properties.height_m === null);
+    for (const f of flat) expect(f.properties.height_tier).toBeNull();
+  });
 });
