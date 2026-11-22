@@ -73,7 +73,7 @@ button { cursor: pointer; }
 
 .ticker { display: flex; align-items: center; gap: 8px; padding: 0 10px; min-height: 28px; border-top: 1px solid var(--line); background: var(--bg); font-size: var(--t-micro); overflow: hidden; }
 .tk-scope { color: var(--dim); border: 1px solid var(--line-hi); padding: 0 4px; line-height: 1.4; flex-shrink: 0; }
-.tk-scope.ncu { color: var(--amber); border-color: var(--amber); }
+.tk-scope.ncu { color: var(--ink); border-color: var(--ink); } /* amber is reserved for "act" */
 .tk-link { color: var(--ink); text-decoration: none; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; flex: 1 1 auto; min-width: 0; }
 .tk-link:hover { color: var(--amber); }
 .tk-meta { color: var(--dim); white-space: nowrap; flex-shrink: 0; }

@@ -11,6 +11,8 @@ export interface BuildingProps {
   height_m: number | null;
   height_source?: string | null;
   height_tier?: 'observed' | 'modeled' | null;
+  nlsc_n?: number;   // NLSC LiDAR roof sections inside this footprint
+  nlsc_min?: number; // lowest of them (m); height_m is the tallest
   height_mdate?: string | null;
   kwp: number;
   kwh_yr: number;

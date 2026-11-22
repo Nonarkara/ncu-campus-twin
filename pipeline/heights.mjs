@@ -58,29 +58,7 @@ function inRing(pt, r) {
   return c;
 }
 
-function distMeters(a, b) {
-  const lat = ((a[1] + b[1]) / 2) * (Math.PI / 180);
-  const dx = (a[0] - b[0]) * Math.cos(lat) * 111320;
-  const dy = (a[1] - b[1]) * 110540;
-  return Math.hypot(dx, dy);
-}
 
-function distToPolygonEdgeMeters(pt, ring) {
-  let best = Infinity;
-  const lat = pt[1] * (Math.PI / 180);
-  const kx = Math.cos(lat) * 111320, ky = 110540;
-  const px = pt[0] * kx, py = pt[1] * ky;
-  for (let i = 0, j = ring.length - 1; i < ring.length; j = i++) {
-    const ax = ring[j][0] * kx, ay = ring[j][1] * ky;
-    const bx = ring[i][0] * kx, by = ring[i][1] * ky;
-    const abx = bx - ax, aby = by - ay;
-    const len2 = abx * abx + aby * aby;
-    const t = len2 > 0 ? Math.max(0, Math.min(1, ((px - ax) * abx + (py - ay) * aby) / len2)) : 0;
-    const d = Math.hypot(px - (ax + t * abx), py - (ay + t * aby));
-    if (d < best) best = d;
-  }
-  return best;
-}
 
 function decodeGlbMetadata(buf) {
   if (buf.length < 28 || buf.toString('ascii', 0, 4) !== 'glTF') return [];
@@ -112,7 +90,12 @@ const campusPath = join(ROOT, 'public/data/campus.json');
 const campus = JSON.parse(await readFile(campusPath, 'utf8'));
 
 // Traverse NLSC tileset for leaves within 800 m of NCU centre
+const RAW = join(ROOT, 'var/raw/heights/nlsc/ncu-nlsc-buildings.json');
 const ncuEcef = toEcef(24.9684, 121.1916, 130);
+if (process.argv.includes('--cached')) {
+  await matchAndWrite(JSON.parse(await readFile(RAW, 'utf8')).buildings);
+  process.exit(0);
+}
 const root = await (await fetch(BASE + 'tileset.json', { signal: AbortSignal.timeout(20000) })).json();
 const leafUris = [];
 function walk(node) {
@@ -180,24 +163,17 @@ await writeFile(join(ROOT, 'var/raw/heights/nlsc/ncu-nlsc-buildings.json'), JSON
 }, null, 2));
 console.log(`Extracted ${nlscBuildings.length} unique NLSC measured buildings in NCU bbox.`);
 
-// Match NLSC measured heights to our 109 OSM campus buildings (point-in-polygon first, then <=6 m edge fallback)
-let matchedInside = 0, matchedNear = 0, keptOsm = 0, unknown = 0;
+await matchAndWrite(nlscBuildings);
+
+// Match NLSC measured heights to OSM campus footprints: an NLSC block counts only if its centroid is INSIDE the footprint.
+// (A ≤6 m "nearest outside" fallback was removed 2026-11-22: it gave dorm 男六舍 a neighbouring shed's 2.4 m. No height beats a wrong one.)
+// NLSC splits roofs into LiDAR sections, so one footprint can hold many blocks: extrude to the tallest, keep the count and range.
+async function matchAndWrite(nlscBuildings) {
+let matchedInside = 0, keptOsm = 0, unknown = 0;
 for (const feat of campus.buildings.features) {
   const ring = feat.geometry.coordinates[0];
   const inside = nlscBuildings.filter(b => inRing([b.lon, b.lat], ring));
-  let hits = inside;
-  let mode = 'inside';
-  if (!hits.length) {
-    // Check for centroid within 6 m of polygon boundary (handles L-shaped/courtyard buildings whose centroid sits just outside)
-    const near = nlscBuildings
-      .map(b => ({ b, d: distToPolygonEdgeMeters([b.lon, b.lat], ring) }))
-      .filter(x => x.d <= 6)
-      .sort((a, b) => a.d - b.d);
-    if (near.length) {
-      hits = [near[0].b];
-      mode = 'near';
-    }
-  }
+  const hits = inside;
   if (hits.length) {
     // Pick the tallest measured section for buildings with multiple NLSC sub-blocks
     const best = hits.reduce((a, b) => (b.height_m > a.height_m ? b : a));
@@ -206,8 +182,9 @@ for (const feat of campus.buildings.features) {
     feat.properties.height_source = 'NLSC 3D Building Model';
     feat.properties.height_tier = 'observed';
     feat.properties.height_mdate = best.mdate;
-    if (mode === 'inside') matchedInside++;
-    else matchedNear++;
+    feat.properties.nlsc_n = hits.length;
+    feat.properties.nlsc_min = Math.min(...hits.map(h => h.height_m));
+    matchedInside++;
   } else if (feat.properties.levels) {
     feat.properties.height_source = 'OSM building:levels × 3.5 m';
     feat.properties.height_tier = 'modeled';
@@ -226,15 +203,16 @@ campus.meta.heights = {
   source: 'NLSC 桃園市分棟版建物模型 (3D Tiles)',
   tier: 'observed',
   fetchedAt: new Date().toISOString(),
-  matched_nlsc: matchedInside + matchedNear,
+  matched_nlsc: matchedInside,
   matched_osm_floors: keptOsm,
   unknown,
 };
 
 await writeFile(campusPath, JSON.stringify(campus));
-console.log(`Updated public/data/campus.json: NLSC measured=${matchedInside + matchedNear} (inside=${matchedInside}, <=6m=${matchedNear}), OSM floors=${keptOsm}, unknown=${unknown}`);
+console.log(`Updated public/data/campus.json: NLSC measured=${matchedInside}, OSM floors=${keptOsm}, unknown=${unknown}`);
 console.log('Sample named buildings with NLSC heights:');
 for (const f of campus.buildings.features.filter(x => x.properties.name && x.properties.height_tier === 'observed').slice(0, 12)) {
   const p = f.properties;
   console.log(`  ${p.name}: ${p.height_m} m (${p.levels ?? '?'}F, ${p.height_mdate})`);
+}
 }

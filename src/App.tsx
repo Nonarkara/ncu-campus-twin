@@ -131,8 +131,8 @@ function BuildingInspector({
                   <small>
                     {p.height_tier === 'observed'
                       ? (l === 'en'
-                        ? `NLSC 3D measured${p.height_mdate ? ` · ${p.height_mdate.slice(0, 4)}-${p.height_mdate.slice(4)}` : ''}`
-                        : `國土測繪 3D 實測${p.height_mdate ? `・${p.height_mdate.slice(0, 4)}-${p.height_mdate.slice(4)}` : ''}`)
+                        ? `NLSC LiDAR${p.height_mdate ? ` · ${p.height_mdate.slice(0, 4)}-${p.height_mdate.slice(4)}` : ''}${(p.nlsc_n ?? 1) > 1 ? ` · tallest of ${p.nlsc_n} roof sections (lowest ${p.nlsc_min} m)` : ''}`
+                        : `國土測繪 LiDAR 實測${p.height_mdate ? `・${p.height_mdate.slice(0, 4)}-${p.height_mdate.slice(4)}` : ''}${(p.nlsc_n ?? 1) > 1 ? `・${p.nlsc_n} 個屋頂分區取最高（最低 ${p.nlsc_min} m）` : ''}`)
                       : (l === 'en' ? 'OSM floors × 3.5 m (modeled)' : 'OSM 樓層 × 3.5 m（模式）')}
                   </small>
                 </>
@@ -748,7 +748,7 @@ export function App() {
 
   useEffect(() => {
     const loadToday = () =>
-      fetch('/api/today')
+      fetch('/api/today', { cache: 'no-cache' })
         .then(r => r.json() as Promise<Today>)
         .then(j => { setToday({ ...j, hourly: j.hourly ?? [], slots: j.slots ?? [], steady: j.steady ?? [], items: j.items ?? [] }); setTodayErr(false); }) // a browser-cached older payload may lack newer fields
         .catch(() => setTodayErr(true));

@@ -204,8 +204,8 @@ export function TwinLens({ eco, ndvi, live, campus, dir, layers, onToggle, onFoc
                 : `${measured} 棟國土測繪實測${modeledH ? ` + ${modeledH} 棟 OSM 樓層` : ''}・最高 ${maxH.toFixed(1)} m`}
             </b>
             <small>{l === 'en'
-              ? `Measured BUILD_H from NLSC Taoyuan 3D Tiles matched inside OSM footprints; ${flatBlds} unmeasured footprints stay flat, never guessed.`
-              : `採國土測繪中心桃園市分棟三維建物實測高度（BUILD_H）套合 OSM 輪廓；其餘 ${flatBlds} 棟無實測值維持平面，絕不推估。`}<br /><M m={hMeta} l={l} /></small>
+              ? `LiDAR heights (BUILD_H) from NLSC Taoyuan 3D Tiles, used only when the NLSC block sits inside the footprint; a footprint with several roof sections takes the tallest. ${flatBlds} footprints with no block inside stay flat, never guessed.`
+              : `採國土測繪中心桃園市分棟三維建物 LiDAR 實測高度（BUILD_H），僅在建物塊位於輪廓內時採用；多個屋頂分區取最高。其餘 ${flatBlds} 棟無對應維持平面，絕不推估。`}<br /><M m={hMeta} l={l} /></small>
           </li>
         )}
       </ul>

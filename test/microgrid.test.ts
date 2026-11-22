@@ -80,13 +80,18 @@ describe('campus spatial anchors', () => {
     expect(minutesUntil('11:45', '12:13')).toBe(28);
   });
 
-  it('NLSC measured 3D heights cover >=90 campus buildings with explicit observed provenance, never guessing nulls', () => {
+  it('NLSC heights come only from blocks inside the footprint, never from a nearby outside block', () => {
     const observed = campus.buildings.features.filter(f => f.properties.height_tier === 'observed');
-    expect(observed.length).toBeGreaterThanOrEqual(90);
+    expect(observed.length).toBeGreaterThan(0);
     for (const f of observed) {
       expect(f.properties.height_m).toBeGreaterThan(0);
       expect(f.properties.height_source).toContain('NLSC');
+      expect(f.properties.nlsc_n).toBeGreaterThanOrEqual(1); // counted blocks inside
+      expect(f.properties.nlsc_min).toBeLessThanOrEqual(f.properties.height_m!);
     }
+    // Regression: the ≤6 m outside fallback once gave this 3-storey dorm a neighbouring shed's 2.4 m.
+    const dorm6 = campus.buildings.features.find(f => f.properties.name === '男六舍');
+    expect(dorm6?.properties.height_m === null || dorm6!.properties.height_m! > 5).toBe(true);
     const flat = campus.buildings.features.filter(f => f.properties.height_m === null);
     for (const f of flat) expect(f.properties.height_tier).toBeNull();
   });

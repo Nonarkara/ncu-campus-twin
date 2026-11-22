@@ -52,7 +52,8 @@ async function air(): Promise<Feed<Air>> {
   const source = 'Open-Meteo CAMS model';
   try {
     const j = await getJson(`https://air-quality-api.open-meteo.com/v1/air-quality?latitude=${LAT}&longitude=${LON}&current=pm2_5&timezone=Asia%2FTaipei`);
-    return { data: { pm25: j.current.pm2_5, n: 0, observedAt: j.current.time }, meta: { source, tier: 'modeled', asOf: j.current.time } };
+    const t = `${j.current.time}:00+08:00`; // Open-Meteo returns local time (timezone=Asia/Taipei) without an offset
+    return { data: { pm25: j.current.pm2_5, n: 0, observedAt: t }, meta: { source, tier: 'modeled', asOf: t } };
   } catch { return { data: null, meta: { source, tier: 'unavailable', asOf: null } }; }
 }
 
@@ -182,7 +183,9 @@ async function live(env: Env): Promise<Response> {
 async function today(req: Request, url: URL, ctx: ExecutionContext): Promise<Response> {
   {
     const cache = (caches as unknown as { default: Cache }).default;
-    const key = new Request(url.origin + '/api/today?v=3'); // bump when the payload shape changes
+    // 5-minute bucket in the key: a cached payload can never outlive its slot, whatever the cache does with max-age.
+    // (Seen 2026-11-22: an edge served a 3.5 h old payload.) Bump v when the payload shape changes.
+    const key = new Request(`${url.origin}/api/today?v=4&t=${Math.floor(Date.now() / 300000)}`);
     const hit = await cache.match(key);
     if (hit) return hit;
     const [fc, aq] = await Promise.all([forecast(), air()]);

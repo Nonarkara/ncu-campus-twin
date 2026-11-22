@@ -65,3 +65,15 @@ describe('news ingestion & corpus engine', () => {
     expect(classifyTopic('National Central University launches lunar satellite payload')).toBe('research');
   });
 });
+
+describe('untrusted feed text', () => {
+  it('drops items whose link is not http(s)', () => {
+    const rss = `<rss><channel><item><title>中央大學新聞標題測試一 - 某報</title><link>javascript:alert(1)</link><pubDate>Sun, 22 Nov 2026 04:00:00 GMT</pubDate></item></channel></rss>`;
+    expect(parseGoogleNewsRss(rss, 'ncu', 'zh', '2026-11-22T00:00:00Z')).toEqual([]);
+  });
+  it('CSV export never starts a cell with a formula character', () => {
+    const csv = toCsv([{ id: 'x', title: '=HYPERLINK("http://evil","click")', url: 'https://a.b', source: '+x', publishedAt: '', firstSeenAt: '', scope: 'ncu', topic: 'campus', lang: 'en' } as any]);
+    const row = csv.split('\n')[1];
+    expect(row).not.toMatch(/(^|,)"[=+\-@]/);
+  });
+});

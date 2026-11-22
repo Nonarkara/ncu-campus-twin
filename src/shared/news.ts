@@ -107,7 +107,7 @@ export function parseGoogleNewsRss(
     const url = decodeXml(block.match(/<link>([\s\S]*?)<\/link>/)?.[1] ?? '');
     const pubRaw = decodeXml(block.match(/<pubDate>([\s\S]*?)<\/pubDate>/)?.[1] ?? '');
     const srcTag = decodeXml(block.match(/<source[^>]*>([\s\S]*?)<\/source>/)?.[1] ?? '');
-    if (!rawTitle || !url) continue;
+    if (!rawTitle || !/^https?:\/\//i.test(url)) continue; // feed text is untrusted: only web links reach an href
 
     // Strip trailing " - SourceName" that Google News appends to titles
     let title = rawTitle;
@@ -192,7 +192,8 @@ export function toJsonl(items: NewsItem[]): string {
   return items.map(it => JSON.stringify(it)).join('\n') + (items.length ? '\n' : '');
 }
 
-const csvEsc = (v: string) => `"${v.replace(/"/g, '""')}"`;
+// Quote every cell, and defuse a leading = + - @ tab or CR so a spreadsheet never runs a headline as a formula (OWASP CSV injection).
+const csvEsc = (v: string) => `"${(/^[=+\-@\t\r]/.test(v) ? `'${v}` : v).replace(/"/g, '""')}"`;
 export function toCsv(items: NewsItem[]): string {
   const header = 'id,publishedAt,firstSeenAt,scope,topic,lang,source,title,url';
   const rows = items.map(it =>
