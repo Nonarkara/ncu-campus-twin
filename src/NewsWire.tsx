@@ -11,7 +11,7 @@ const TOPIC_LABEL: Record<NewsTopic, [string, string]> = {
   environment: ['Env', '環境'],
   research: ['Research', '研究'],
   campus: ['Campus', '校園'],
-  civic: ['Taoyuan', '市政'],
+  civic: ['Local', '地方'],
 };
 
 function relAge(iso: string, l: L) {
