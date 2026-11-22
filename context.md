@@ -10,3 +10,16 @@
 - **Dead source:** Civil IoT `sta.colife.org.tw`. Its TLS certificate expired 2026-11-21 23:59 UTC. The archive is in `var/civiliot/` (14 h, 10,941 rows). The worker still tries it, then falls back to the CAMS model, labelled.
 - **Needs Dr Non:** free keys for TDX (live buses), CWA (warnings, quakes) and MOENV (official AQI). Store them with `wrangler secret put`, never in the repo. An NCU contact is needed before anything public uses NCU marks.
 - **Next:** a Ground lens (Sentinel-2 NDVI year on year), a TDX live bus layer, CWA warnings in Today.
+
+## v0.3 — Twin + Find (2026-11-22)
+- **Twin lens** (3D camera, drag to rotate):
+  - Sentinel-2 NDVI 20 m grid. Run `node pipeline/ndvi.mjs`. The pair 2026-11-17 vs 2025-11-15 was chosen by scoring every 2025 and 2026 autumn scene for SCL-clear sky over campus. The 2025-10-13 scene was hazy and faked a +18 pt "gain".
+  - Water network and wildlife from OSM and GBIF. Run `node pipeline/eco.mjs`. Only GBIF records with position ≤ 50 m and unrounded coordinates are pinned (11); eBird hotspot and moth-network records are counted, not pinned.
+  - Live YouBike docks, fetched by the browser: the feed allows CORS but returns 403 to Cloudflare servers. Do not spoof headers.
+  - Live Freeway 1 detectors at the Zhongli exit. A cron (*/5) pulls `VDLive.xml` into KV `LIVE` (id 2ce57fb11c484cc0b302fc6e36b1ba22, key `road`). Some edge locations get 522 from the source, so requests never fetch it directly.
+- **Find lens**: `public/data/directory.json` from `var/raw/directory/directory.json`, cooked by `pipeline/directory.mjs`.
+  - 169 official entries, each linked to its page.
+  - Entries link to an OSM footprint only by exact name or the hand-checked ALIAS table (44 linked).
+- **Heights**: OSM has floors for only 4 campus buildings, Overture has 0, and Google 2.5D does not cover Taiwan. Only those 4 are extruded.
+  - Measured heights (`BUILD_H`, with a source code per building) are in the NLSC 三維建物模型. A small area can be requested online by a registered user at https://3dmaps.nlsc.gov.tw. That application needs Dr Non.
+- Not published anywhere: dorm bed counts, current car/scooter capacity, restaurant count.

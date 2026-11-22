@@ -13,7 +13,8 @@ button, input { font: inherit; color: inherit; background: none; border: 0; }
 button { cursor: pointer; }
 :focus-visible { outline: 2px solid var(--amber); outline-offset: 2px; }
 
-.app { display: grid; grid-template-columns: 1fr; }
+.app { display: grid; grid-template-columns: minmax(0, 1fr); }
+.panel { min-width: 0; }
 .panel { padding: 0 16px 16px; }
 .map { height: 54vh; border-top: 1px solid var(--line); position: relative; }
 @media (min-width: 900px) {
@@ -145,7 +146,7 @@ button { cursor: pointer; }
 .steady li { padding: 6px 0; border-top: 1px solid var(--line); }
 .steady li > span { color: var(--dim); margin-right: 8px; }
 .steady b { font-weight: 500; }
-.steady small { display: block; font-size: var(--t-micro); color: var(--dim); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.steady small { display: block; font-size: var(--t-micro); color: var(--dim); }
 .steady .cd { font-style: normal; color: var(--amber); font-size: var(--t-micro); }
 .steady .t { margin-right: 0; white-space: nowrap; }
 .steady sub { font-size: var(--t-micro); color: var(--dim); vertical-align: baseline; margin-left: 2px; }
@@ -164,3 +165,25 @@ details.off ul { list-style: none; padding: 0; }
   .lang { min-height: 24px; }
 }
 @media (pointer: coarse) { .lang, .row-add, .stop-btn, .actbtn { min-height: 44px; } }
+
+/* Twin + Find (v0.3) */
+.hero b small { font-size: var(--t-body); font-weight: 400; margin-left: 2px; }
+.hero .act { color: var(--amber); }
+.chips { display: flex; flex-wrap: wrap; gap: 4px; padding: 2px 0 10px; }
+.chips button { border: 1px solid var(--line); padding: 4px 8px; font-size: var(--t-micro); color: var(--dim); min-height: 32px; }
+.chips button small { color: var(--dim); margin-left: 3px; }
+.chips button[aria-pressed='true'] { color: var(--ink); border-color: var(--ink); }
+.steady b .act, .steady b.act { color: var(--amber); }
+.steady i { color: var(--dim); font-size: var(--t-micro); }
+.search.find { font-size: var(--t-body); margin: 0 0 8px; min-height: 32px; }
+.dir { list-style: none; padding: 0; }
+.dir li { display: flex; flex-wrap: wrap; align-items: baseline; column-gap: 8px; padding: 5px 0; border-top: 1px solid var(--line); }
+.dir li > a { color: var(--ink); text-decoration: none; }
+.dir li > a:hover { color: var(--amber); }
+.dir .alt { color: var(--dim); font-size: var(--t-micro); }
+.dir .meta { margin: 0 0 0 auto; display: inline-flex; gap: 10px; }
+.dir .meta a, .dir .meta button { color: var(--dim); font-size: var(--t-micro); text-decoration: none; }
+.dir .meta a:hover, .dir .meta button:hover { color: var(--ink); }
+.dir .meta .cap { color: var(--ink); }
+@media (max-width: 520px) { .search-wrap { display: none; } .tabs { gap: 12px; } }
+@media (hover: hover) and (pointer: fine) { .chips button { min-height: 24px; padding: 2px 7px; } }

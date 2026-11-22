@@ -19,7 +19,9 @@ import {
 
 setWorkerUrl(workerUrl);
 
-export type Lens = 'today' | 'power' | 'move';
+export type Lens = 'today' | 'twin' | 'power' | 'move' | 'find';
+export type TwinLayer = 'green' | 'water' | 'bio' | 'flow' | 'b3d';
+export interface TwinData { eco: any; ndvi: any; live: import('./shared/live').Live | null; layers: Set<TwinLayer> }
 const BOUNDS: [number, number, number, number] = [121.1849, 24.9651, 121.1968, 24.9717]; // OSM relation/18727079 bbox
 const INK = 'rgba(230,237,243,';
 const AMBER = '#f59e0b';
@@ -58,6 +60,7 @@ interface CampusMapProps {
   selectedStopName: string | null;
   onSelectStop: (name: string | null) => void;
   focusCoord: { coord: [number, number]; seq: number } | null;
+  twin: TwinData;
 }
 
 export function CampusMap({
@@ -70,6 +73,7 @@ export function CampusMap({
   selectedStopName,
   onSelectStop,
   focusCoord,
+  twin,
 }: CampusMapProps) {
   const el = useRef<HTMLDivElement>(null);
   const map = useRef<MLMap | null>(null);
@@ -150,7 +154,17 @@ export function CampusMap({
         paint: { 'line-color': AMBER, 'line-width': 1, 'line-dasharray': [3, 3] },
       });
 
-      // Buildings fill & outline
+      // Twin lens: Sentinel-2 NDVI grid, water network, wildlife pins, live docks and detectors
+      for (const id of ['ndvi', 'water', 'bio', 'docks', 'vd']) m.addSource(id, { type: 'geojson', data: EMPTY_FC });
+      m.addLayer({ id: 'ndvi', type: 'fill', source: 'ndvi', layout: { visibility: 'none' }, paint: {
+        'fill-color': ['case', ['<=', ['get', 'd'], -0.15], 'rgba(245,158,11,0.6)',
+          ['interpolate', ['linear'], ['get', 'v'], 0.1, INK + '0)', 0.4, INK + '0.10)', 0.8, INK + '0.32)']] } });
+      m.addLayer({ id: 'water-area', type: 'fill', source: 'water', filter: ['==', ['geometry-type'], 'Polygon'], layout: { visibility: 'none' },
+        paint: { 'fill-color': INK + '0.22)', 'fill-outline-color': INK + '0.7)' } });
+      m.addLayer({ id: 'water-line', type: 'line', source: 'water', filter: ['==', ['geometry-type'], 'LineString'], layout: { visibility: 'none' },
+        paint: { 'line-color': INK + '0.75)', 'line-width': ['match', ['get', 'k'], 'river', 3, 'canal', 2, 'stream', 1.5, 1],
+          'line-dasharray': ['match', ['get', 'k'], ['drain', 'ditch'], ['literal', [2, 1.5]], ['literal', [1, 0]]] } });
+
       m.addLayer({ id: 'bld', type: 'fill', source: 'bld', paint: { 'fill-color': INK + '0.14)' } });
       m.addLayer({
         id: 'bld-line',
@@ -161,6 +175,17 @@ export function CampusMap({
           'line-width': ['case', ['boolean', ['feature-state', 'hover'], false], 2, 0.75],
         },
       });
+
+      // 3D: only buildings with stated floors are extruded; the rest stay footprints
+      m.addLayer({ id: 'bld-3d', type: 'fill-extrusion', source: 'bld', filter: ['!=', ['get', 'height_m'], null], layout: { visibility: 'none' },
+        paint: { 'fill-extrusion-color': '#9aa4ae', 'fill-extrusion-height': ['get', 'height_m'], 'fill-extrusion-opacity': 0.9 } });
+      m.addLayer({ id: 'bio', type: 'circle', source: 'bio', layout: { visibility: 'none' },
+        paint: { 'circle-radius': 3.5, 'circle-color': '#0a0e14', 'circle-stroke-color': INK + '0.9)', 'circle-stroke-width': 1.5 } });
+      m.addLayer({ id: 'docks', type: 'circle', source: 'docks', layout: { visibility: 'none' },
+        paint: { 'circle-radius': ['interpolate', ['linear'], ['get', 'capacity'], 30, 6, 70, 10], 'circle-color': '#0a0e14',
+          'circle-stroke-color': ['case', ['<=', ['get', 'bikes'], 2], AMBER, '#e6edf3'], 'circle-stroke-width': 2 } });
+      m.addLayer({ id: 'vd', type: 'circle', source: 'vd', layout: { visibility: 'none' },
+        paint: { 'circle-radius': 6, 'circle-color': ['case', ['<', ['coalesce', ['get', 'speed'], 999], 40], AMBER, '#e6edf3'], 'circle-stroke-color': '#0a0e14', 'circle-stroke-width': 2 } });
 
       // Straight-line radial screening links from HV substation to selected roofs (Power lens)
       m.addLayer({
@@ -202,6 +227,10 @@ export function CampusMap({
         },
       });
 
+      for (const id of ['docks', 'vd', 'bio']) {
+        m.on('mousemove', id, (e: any) => { const f = e.features?.[0]; if (f) setHoverText(JSON.stringify({ kind: id, p: f.properties })); });
+        m.on('mouseleave', id, () => setHoverText(null));
+      }
       let hovered: string | null = null;
       m.on('mousemove', 'bld', (e: any) => {
         m.getCanvas().style.cursor = 'pointer';
@@ -367,6 +396,39 @@ export function CampusMap({
     m.setLayoutProperty('photo', 'visibility', photo ? 'visible' : 'none');
   }, [lens, ready, photo, campus, selectedBuildingId, portfolioIds, selectedStopName]);
 
+  // Twin data
+  useEffect(() => {
+    const m = map.current;
+    if (!m || !ready) return;
+    const set = (id: string, d: any) => (m.getSource(id) as GeoJSONSource | undefined)?.setData(d ?? EMPTY_FC);
+    set('ndvi', twin.ndvi?.grid);
+    set('water', twin.eco?.water);
+    set('bio', twin.eco?.bio.pins);
+    set('docks', { type: 'FeatureCollection', features: (twin.live?.docks.data ?? []).map(d => ({ type: 'Feature', properties: d, geometry: { type: 'Point', coordinates: [d.lon, d.lat] } })) });
+    set('vd', { type: 'FeatureCollection', features: (twin.live?.road.data ?? []).map(f => ({ type: 'Feature', properties: { ...f, label: f.label.join(' / ') }, geometry: { type: 'Point', coordinates: [f.lon, f.lat] } })) });
+  }, [ready, twin.ndvi, twin.eco, twin.live]);
+
+  // Twin visibility + camera: tilt into 3D on entering the Twin lens, flat elsewhere
+  useEffect(() => {
+    const m = map.current;
+    if (!m || !ready) return;
+    const on = (k: TwinLayer) => lens === 'twin' && twin.layers.has(k);
+    const vis = (id: string, v: boolean) => m.setLayoutProperty(id, 'visibility', v ? 'visible' : 'none');
+    vis('ndvi', on('green'));
+    vis('water-area', on('water')); vis('water-line', on('water'));
+    vis('bio', on('bio'));
+    vis('docks', on('flow')); vis('vd', on('flow'));
+    vis('bld-3d', on('b3d'));
+    const reduced = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+    if (lens === 'twin' && twin.layers.has('b3d')) {
+      m.dragRotate.enable(); m.touchZoomRotate.enableRotation();
+      if (m.getPitch() < 10) m.easeTo({ pitch: 55, bearing: -18, duration: reduced ? 0 : 500 });
+    } else {
+      m.dragRotate.disable(); m.touchZoomRotate.disableRotation();
+      if (m.getPitch() > 0 || m.getBearing() !== 0) m.easeTo({ pitch: 0, bearing: 0, duration: reduced ? 0 : 300 });
+    }
+  }, [lens, ready, twin.layers]);
+
   // Smoothly focus on selected building or stop (respects reduced motion)
   useEffect(() => {
     const m = map.current;
@@ -383,13 +445,21 @@ export function CampusMap({
     const m = map.current;
     if (!m) return;
     const reduced = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
-    m.fitBounds(BOUNDS, { padding: 28, duration: reduced ? 0 : 240 });
+    m.fitBounds(BOUNDS, { padding: 28, duration: reduced ? 0 : 240, pitch: m.getPitch(), bearing: m.getBearing() });
   };
 
   let legend: string;
   if (hoverText) {
     const parsed = JSON.parse(hoverText);
-    if (parsed.kind === 'stop') {
+    if (parsed.kind === 'docks') {
+      const d = parsed.p;
+      legend = `YouBike · ${l === 'en' ? d.en : d.zh} · ${d.bikes} ${l === 'en' ? 'bikes' : '車'} · ${d.free}/${d.capacity} ${l === 'en' ? 'docks free' : '空位'}`;
+    } else if (parsed.kind === 'vd') {
+      const f = parsed.p; const lab = String(f.label).split(' / ');
+      legend = `${l === 'en' ? lab[0] : lab[1]} · ${f.speed ?? '—'} km/h · ${Number(f.vph).toLocaleString('en-US')} ${l === 'en' ? 'veh/h' : '輛/時'} · Freeway Bureau VD`;
+    } else if (parsed.kind === 'bio') {
+      legend = `${parsed.p.vn ?? parsed.p.sp} · ${parsed.p.sp} · ${parsed.p.y} · ±${parsed.p.u} m · GBIF`;
+    } else if (parsed.kind === 'stop') {
       legend = `${l === 'en' ? 'Bus stop' : '公車站'} · ${parsed.name}`;
     } else {
       const p = parsed.p;
@@ -406,6 +476,10 @@ export function CampusMap({
       : (l === 'en'
         ? 'Click any roof to inspect or add to microgrid · ring = HV substation'
         : '點選任一建物檢視或加入微電網 · 圓環 = 高壓變電站');
+  } else if (lens === 'twin') {
+    legend = l === 'en'
+      ? 'Brighter = greener (Sentinel-2) · amber = NDVI down ≥0.15 vs a year ago · drag to rotate · 3D only where floors are stated'
+      : '越亮越綠（Sentinel-2）・琥珀 = NDVI 較去年下降 ≥0.15・拖曳旋轉・僅有樓層資料者立體呈現';
   } else if (lens === 'move') {
     legend = selectedStopName
       ? (l === 'en' ? `${selectedStopName} · dashed ring = 300 m (~4 min walk)` : `${selectedStopName} · 虛線圓 = 300 公尺（步行約 4 分）`)

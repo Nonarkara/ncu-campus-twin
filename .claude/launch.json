@@ -1,6 +1,6 @@
 {
   "version": "0.0.1",
   "configurations": [
-    { "name": "ncu-worker", "runtimeExecutable": "npx", "runtimeArgs": ["wrangler", "dev", "--port", "8787"], "port": 8787 }
+    { "name": "ncu-worker", "runtimeExecutable": "npx", "runtimeArgs": ["wrangler", "dev", "--port", "8787", "--var", "DEV:1"], "port": 8787 }
   ]
 }

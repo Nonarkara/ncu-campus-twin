@@ -1,7 +1,8 @@
 // Edge: static assets + /api/today. Fetches open feeds, wraps each in {source, tier, asOf}, runs the Today engine.
 import { buildToday, type Feed, type Forecast, type Air } from '../src/shared/today';
+import { parseVDLive, type Live } from '../src/shared/live';
 
-interface Env { ASSETS: Fetcher }
+interface Env { ASSETS: Fetcher; LIVE: KVNamespace; DEV?: string }
 const LAT = 24.9684, LON = 121.1916; // OSM relation/18727079 centre
 
 async function getJson(url: string, ms = 12000) {
@@ -54,7 +55,7 @@ const SECURITY: Record<string, string> = {
   'content-security-policy': [
     "default-src 'self'", "script-src 'self'", "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com",
     "font-src https://fonts.gstatic.com", "img-src 'self' data: blob: https://wmts.nlsc.gov.tw",
-    "connect-src 'self' https://wmts.nlsc.gov.tw", "worker-src 'self' blob:", "frame-ancestors 'none'", "base-uri 'none'", "form-action 'none'",
+    "connect-src 'self' https://wmts.nlsc.gov.tw https://apis.youbike.com.tw", "worker-src 'self' blob:", "frame-ancestors 'none'", "base-uri 'none'", "form-action 'none'",
   ].join('; '),
 };
 function secure(res: Response) {
@@ -64,13 +65,35 @@ function secure(res: Response) {
 }
 
 export default {
+  async scheduled(_e: ScheduledController, env: Env, ctx: ExecutionContext) { ctx.waitUntil(pullRoad(env)); },
   async fetch(req: Request, env: Env, ctx: ExecutionContext) {
     const url = new URL(req.url);
-    if (url.protocol === 'http:' && url.hostname !== 'localhost') { url.protocol = 'https:'; return Response.redirect(url.toString(), 301); }
+    if (url.protocol === 'http:' && url.hostname !== 'localhost' && !env.DEV) { url.protocol = 'https:'; return Response.redirect(url.toString(), 301); }
+    if (url.pathname === '/api/live') return secure(await live(env));
     if (url.pathname !== '/api/today') return secure(await env.ASSETS.fetch(req));
     return secure(await today(req, url, ctx));
   },
 };
+
+const ROAD_SRC = 'Freeway Bureau VD (MOTC)';
+
+/** Cron, every 5 min: fetch the ~5 MB detector file once, keep the last good reading in KV (global).
+ *  Some edge locations cannot reach the source, so requests never fetch it themselves. */
+async function pullRoad(env: Env) {
+  const r = await fetch('https://tisvcloud.freeway.gov.tw/history/motc20/VDLive.xml', { signal: AbortSignal.timeout(25000), headers: { 'user-agent': 'ncu-campus-twin/0.3' } });
+  if (!r.ok) throw new Error(String(r.status));
+  const data = parseVDLive(await r.text());
+  if (data.length) await env.LIVE.put('road', JSON.stringify(data));
+}
+
+/** Last good detector reading. Its own collection time travels with it, so the page shows its real age. */
+async function live(env: Env): Promise<Response> {
+  const data: Live['road']['data'] = JSON.parse((await env.LIVE.get('road', { cacheTtl: 60 })) ?? '[]');
+  const body: Pick<Live, 'road'> = {
+    road: { data, meta: { source: ROAD_SRC, tier: data.length ? 'live' : 'unavailable', asOf: data.map(f => f.at).sort().at(-1) ?? null } },
+  };
+  return new Response(JSON.stringify(body), { headers: { 'content-type': 'application/json', 'cache-control': 'public, max-age=60' } });
+}
 
 async function today(req: Request, url: URL, ctx: ExecutionContext): Promise<Response> {
   {

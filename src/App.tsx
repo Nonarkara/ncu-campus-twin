@@ -21,6 +21,9 @@ import {
 } from './shared/campus';
 import timetable from '../data/timetable.json';
 import { CampusMap, type Lens } from './CampusMap';
+import { TwinLens, type Eco, type Ndvi, type Layer } from './TwinLens';
+import { FindLens, type Directory } from './FindLens';
+import { parseYouBike, type Live } from './shared/live';
 import { HeadwayStrip, HourlyStrip, IslandChart, type MetricKey } from './Charts';
 
 type L = 'en' | 'zh';
@@ -28,6 +31,8 @@ type Row = [string, string, string, string];
 
 const T = {
   today: ['Today', '今日'],
+  twin: ['Twin', '孿生'],
+  find: ['Find', '查詢'],
   power: ['Microgrid', '微電網'],
   move: ['Move', '交通'],
   needs: ['need a decision today', '項需今日決策'],
@@ -567,6 +572,40 @@ export function App() {
   const [portfolioIds, setPortfolioIds] = useState<Set<string>>(() => new Set(LAB_PRESET_IDS));
   const [focusCoord, setFocusCoord] = useState<{ coord: [number, number]; seq: number } | null>(null);
   const [query, setQuery] = useState('');
+  const [eco, setEco] = useState<Eco | null>(null);
+  const [ndvi, setNdvi] = useState<any>(null);
+  const [live, setLive] = useState<Live | null>(null);
+  const [dir, setDir] = useState<Directory | null>(null);
+  const [layers, setLayers] = useState<Set<Layer>>(() => new Set<Layer>(['b3d', 'green', 'water', 'flow']));
+  const toggleLayer = (k: Layer) => setLayers(prev => { const n = new Set(prev); n.has(k) ? n.delete(k) : n.add(k); return n; });
+
+  // Twin data loads on first visit to Twin; live feeds refresh every 2 min while Twin is open
+  useEffect(() => {
+    if (lens !== 'twin') return;
+    if (!eco) fetch('/data/eco.json').then(r => r.json() as Promise<Eco>).then(setEco).catch(() => {});
+    if (!ndvi) fetch('/data/ndvi.json').then(r => r.json()).then(setNdvi).catch(() => {});
+    // Road from our edge (2-min cache); YouBike straight from its CORS-open feed (~0.9 MB gz), so only while visible, every 5 min.
+    const load = async () => {
+      if (document.hidden) return;
+      const [road, yb] = await Promise.allSettled([
+        fetch('/api/live').then(r => r.json() as Promise<Pick<Live, 'road'>>),
+        fetch('https://apis.youbike.com.tw/json/station-yb2.json').then(r => r.json() as Promise<any[]>),
+      ]);
+      const docks = yb.status === 'fulfilled' ? parseYouBike(yb.value) : [];
+      setLive({
+        road: road.status === 'fulfilled' ? road.value.road : { data: [], meta: { source: 'Freeway Bureau VD (MOTC)', tier: 'unavailable', asOf: null } },
+        docks: { data: docks, meta: { source: 'YouBike 2.0 station feed', tier: docks.length ? 'live' : 'unavailable', asOf: docks.map(d => d.at).sort().at(-1) ?? null } },
+      });
+    };
+    load();
+    const id = setInterval(load, 300000);
+    document.addEventListener('visibilitychange', load);
+    return () => { clearInterval(id); document.removeEventListener('visibilitychange', load); };
+  }, [lens]);
+  useEffect(() => {
+    if ((lens === 'find' || lens === 'twin') && !dir) fetch('/data/directory.json').then(r => r.json() as Promise<Directory>).then(setDir).catch(() => {});
+  }, [lens, dir]);
+  const twin = useMemo(() => ({ eco, ndvi, live, layers }), [eco, ndvi, live, layers]);
 
   useEffect(() => {
     const id = setInterval(() => setClock(taipei(new Date())), 30000);
@@ -580,7 +619,7 @@ export function App() {
     const loadToday = () =>
       fetch('/api/today')
         .then(r => r.json() as Promise<Today>)
-        .then(j => { setToday(j); setTodayErr(false); })
+        .then(j => { setToday({ ...j, hourly: j.hourly ?? [], slots: j.slots ?? [], steady: j.steady ?? [], items: j.items ?? [] }); setTodayErr(false); }) // a browser-cached older payload may lack newer fields
         .catch(() => setTodayErr(true));
     loadToday();
     const id = setInterval(loadToday, 300000);
@@ -633,7 +672,7 @@ export function App() {
       .slice(0, 6);
   }, [query, campus]);
 
-  const tabs = useMemo(() => (['today', 'power', 'move'] as Lens[]), []);
+  const tabs = useMemo(() => (['today', 'twin', 'power', 'move', 'find'] as Lens[]), []);
 
   return (
     <div className="app">
@@ -696,6 +735,10 @@ export function App() {
         {lens === 'today' && (
           <TodayLens t={today} err={todayErr} campus={campus} onSelectBuilding={focusBuilding} l={l} />
         )}
+        {lens === 'twin' && (
+          <TwinLens eco={eco} ndvi={ndvi as Ndvi | null} live={live} campus={campus} dir={dir} layers={layers} onToggle={toggleLayer} l={l} />
+        )}
+        {lens === 'find' && <FindLens dir={dir} onFocusBuilding={focusBuilding} l={l} />}
         {lens === 'power' && (
           <PowerLens
             today={today}
@@ -729,6 +772,7 @@ export function App() {
         selectedStopName={selectedStopName}
         onSelectStop={focusStop}
         focusCoord={focusCoord}
+        twin={twin}
       />
     </div>
   );

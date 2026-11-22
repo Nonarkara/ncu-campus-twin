@@ -1,0 +1,25 @@
+// Raw → cooked directory. Validates every entry (name + http(s) URL), links an entry to an OSM footprint
+// only when its building label equals an OSM building name exactly. No fuzzy matching: a wrong link is worse than none.
+import { readFile, writeFile } from 'node:fs/promises';
+const dir = JSON.parse(await readFile(new URL('../var/raw/directory/directory.json', import.meta.url), 'utf8'));
+const campus = JSON.parse(await readFile(new URL('../public/data/campus.json', import.meta.url), 'utf8'));
+const byName = new Map();
+for (const b of campus.buildings.features) if (b.properties.name) byName.set(b.properties.name.trim(), b.properties.id);
+// Hand-checked equivalences (official map label → OSM name). Each pair names the same building; extend only by reading both.
+const ALIAS = {
+  '學生男三舍': '男三舍', '學生男五舍': '男五舍', '學生男六舍': '男六舍', '學生男七舍': '男七舍', '學生男九舍': '男九舍',
+  '學生男十一舍': '男十一舍', '學生男十二舍': '男十二舍', '學生男十三舍': '男13舍', '學生女一舍': '女一舍', '學生女二舍': '女二舍',
+  '學生女三舍': '女三舍', '學生女四舍': '女四舍', '學生女十四舍': '女十四舍', '教職員單一舍': '單一舍', '教職員單二舍': '單二舍',
+  '教職員單四舍': '單四舍', '桃園市中大國民運動中心': '中大國民運動中心', '科學二館': '科學二館(理學院大樓)',
+};
+let linked = 0, dropped = 0, labelled = 0;
+const categories = dir.categories.map(c => ({ key: c.key, entries: c.entries.filter(e => {
+  const ok = (e.zh || e.en) && /^https?:\/\//.test(e.url ?? ''); if (!ok) dropped++; return ok;
+}).map(e => {
+  if (e.building) labelled++;
+  const osm = e.building ? byName.get(ALIAS[e.building.trim()] ?? e.building.trim()) ?? null : null; if (osm) linked++;
+  return { zh: e.zh ?? null, en: e.en ?? null, url: e.url, phone: e.phone ?? null, capacity: e.capacity ?? null, building: e.building ?? null, osm, note: e.note ?? null };
+}) }));
+await writeFile(new URL('../public/data/directory.json', import.meta.url), JSON.stringify({
+  meta: { source: 'ncu.edu.tw official pages (each entry links its page)', tier: 'observed', asOf: dir.asOf }, categories }));
+console.log({ entries: categories.reduce((s, c) => s + c.entries.length, 0), dropped, labelled, linked });
