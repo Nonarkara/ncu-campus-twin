@@ -131,8 +131,8 @@ function BuildingInspector({
                   <small>
                     {p.height_tier === 'observed'
                       ? (l === 'en'
-                        ? `NLSC LiDAR${p.height_mdate ? ` · ${p.height_mdate.slice(0, 4)}-${p.height_mdate.slice(4)}` : ''}${(p.nlsc_n ?? 1) > 1 ? ` · tallest of ${p.nlsc_n} roof sections (lowest ${p.nlsc_min} m)` : ''}`
-                        : `國土測繪 LiDAR 實測${p.height_mdate ? `・${p.height_mdate.slice(0, 4)}-${p.height_mdate.slice(4)}` : ''}${(p.nlsc_n ?? 1) > 1 ? `・${p.nlsc_n} 個屋頂分區取最高（最低 ${p.nlsc_min} m）` : ''}`)
+                        ? `NLSC BUILD_H, H_SOURCE 0 = LiDAR DSM${p.height_mdate ? ` · ${p.height_mdate.slice(0, 4)}-${p.height_mdate.slice(4)}` : ''}${(p.nlsc_n ?? 1) > 1 ? ` · tallest of ${p.nlsc_n} roof sections (lowest ${p.nlsc_min} m)` : ''}`
+                        : `國土測繪 BUILD_H（H_SOURCE 0 = LiDAR DSM）${p.height_mdate ? `・${p.height_mdate.slice(0, 4)}-${p.height_mdate.slice(4)}` : ''}${(p.nlsc_n ?? 1) > 1 ? `・${p.nlsc_n} 個屋頂分區取最高（最低 ${p.nlsc_min} m）` : ''}`)
                       : (l === 'en' ? 'OSM floors × 3.5 m (modeled)' : 'OSM 樓層 × 3.5 m（模式）')}
                   </small>
                 </>
@@ -761,6 +761,13 @@ export function App() {
   }, []);
 
   // On phone the map sits under the panel: bring it into view so the action has visible feedback.
+  // A tap on the phone map opens the inspector far up the panel: bring it into view so the tap visibly does something.
+  const inspectFromMap = useRef(false);
+  useEffect(() => {
+    if (!selectedBuildingId || !inspectFromMap.current) return;
+    inspectFromMap.current = false;
+    if (window.innerWidth < 900) requestAnimationFrame(() => document.querySelector('.inspector')?.scrollIntoView({ block: 'start', behavior: window.matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth' }));
+  }, [selectedBuildingId]);
   const shownForLayers = useRef(false); // first layer toggle on phone reveals the map once, later ones don't yank the page
   const showMap = () => { if (window.innerWidth < 900) document.getElementById('map')?.scrollIntoView({ behavior: window.matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth' }); };
   const focusBuilding = (id: string) => {
@@ -920,7 +927,7 @@ export function App() {
           l={l}
           campus={campus}
           selectedBuildingId={selectedBuildingId}
-          onSelectBuilding={focusBuilding}
+          onSelectBuilding={id => { inspectFromMap.current = true; focusBuilding(id); }}
           portfolioIds={portfolioIds}
           selectedStopName={selectedStopName}
           onSelectStop={focusStop}

@@ -72,7 +72,7 @@ export function HourlyStrip({
           const x = padL + (i / hourly.length) * plotW;
           const y = yOf(v);
           const bh = Math.max(0, padT + plotH - y);
-          const hot = threshold !== null ? v >= threshold : metric === 'ghi' && v >= 500;
+          const hot = threshold !== null && v >= threshold; // amber only past a rule threshold, never for 'sunny'
           return (
             <rect
               key={h.time}

@@ -118,7 +118,7 @@ export function buildToday(now: Date, fc: Feed<Forecast>, air: Feed<Air>): Today
   const hsr = upcoming(tt.toHSR.rows, 1, hm, weekend);
   const inbound = upcoming(tt.toCampus.rows, 2, hm, weekend);
   steady.push({ id: 'taipei', label: ['9025A to Taipei', '9025A 往臺北'], meta: sched,
-    value: taipeiLeft.length ? [`${taipeiLeft[0][2]} at stop · ${taipeiLeft.length} left today`, `${taipeiLeft[0][2]} 到站 · 今日剩 ${taipeiLeft.length} 班`] : ['none left today', '今日已無班次'] });
+    value: taipeiLeft.length ? [`~${taipeiLeft[0][2]} at stop · ${taipeiLeft.length} left today`, `約 ${taipeiLeft[0][2]} 到站 · 今日剩 ${taipeiLeft.length} 班`] : ['none left today', '今日已無班次'] });
   steady.push({ id: 'hsr', label: ['To HSR Taoyuan', '往高鐵桃園站'], meta: sched,
     value: hsr.length ? [`${hsr[0][0]} ${hsr[0][1]} · last ${hsr.at(-1)![1]}`, `${hsr[0][0]} ${hsr[0][1]} · 末班 ${hsr.at(-1)![1]}`] : ['none left today', '今日已無班次'] });
   steady.push({ id: 'inbound', label: ['Last bus in from Zhongli', '中壢末班進校'], meta: sched,

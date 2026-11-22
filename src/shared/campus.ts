@@ -95,7 +95,7 @@ export const CAMPUS_ANCHORS: Record<string, CampusAnchor> = {
   'way/202805788': {
     id: 'way/202805788',
     role: 'housing',
-    tag: ['Renovation Jul 2026', '2026.07 整修'],
+    tag: ['Renovation from Jul 2026', '2026.07 起整修'],
     note: ['Female Dorm 14 renovation decants graduate students', '女十四舍 2026 年 7 月整修影響研究生住宿調配'],
   },
   'way/270806669': {

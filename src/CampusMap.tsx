@@ -316,7 +316,7 @@ export function CampusMap({
     } else {
       m.setPaintProperty('bld', 'fill-color', [
         'case',
-        isSelected, 'rgba(245,158,11,0.35)',
+        isSelected, 'rgba(230,237,243,0.42)', // selection is ink; amber stays 'act' (NDVI loss shares this view)
         isAnchor, INK + '0.24)',
         INK + '0.13)',
       ]);

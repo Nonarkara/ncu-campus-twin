@@ -18,7 +18,7 @@ export const LAYERS: { k: Layer; t: [string, string] }[] = [
 ];
 
 const pick = (p: readonly [string, string], l: L) => (l === 'en' ? p[0] : p[1]);
-const TIER: Record<string, string> = { live: '即時', observed: '觀測', modeled: '模式', unavailable: '無資料', 'live-snapshot': '快照' };
+const TIER: Record<string, string> = { live: '即時', observed: '觀測', fetched: '擷取', modeled: '模式', unavailable: '無資料', 'live-snapshot': '快照' };
 const age = (iso: string | null, l: L) => {
   if (!iso) return '—';
   const m = Math.round((Date.now() - Date.parse(iso)) / 60000);
@@ -29,6 +29,11 @@ const age = (iso: string | null, l: L) => {
   return iso.slice(0, 10);
 };
 const M = ({ m, l }: { m: { source: string; tier: string; asOf: string | null }; l: L }) => <span className="nb">{m.source} · {l === 'en' ? m.tier : TIER[m.tier] ?? m.tier} · {age(m.asOf, l)}</span>;
+/** Newest NLSC survey month (MDATE YYYYMM) among measured footprints, as an ISO date: the age of the heights, not of our download. */
+const surveyMonth = (blds: CampusData['buildings']['features']) => {
+  const m = blds.map(b => b.properties.height_mdate).filter((x): x is string => !!x && /^\d{6}$/.test(x)).sort().at(-1);
+  return m ? `${m.slice(0, 4)}-${m.slice(4)}-01` : null;
+};
 const n0 = (v: number) => v.toLocaleString('en-US');
 
 const CLASS: Record<string, [string, string]> = {
@@ -76,17 +81,17 @@ export function TwinLens({ eco, ndvi, live, campus, dir, layers, onToggle, onFoc
   const flatBlds = blds.filter(b => b.properties.height_m === null).length;
   const maxH = blds.reduce((m, b) => Math.max(m, b.properties.height_m ?? 0), 0);
   const hMeta = campus?.meta.heights
-    ? { source: campus.meta.heights.source, tier: campus.meta.heights.tier, asOf: campus.meta.heights.fetchedAt }
+    ? { source: campus.meta.heights.source, tier: 'observed', asOf: surveyMonth(blds) ?? campus.meta.heights.fetchedAt }
     : campus ? { source: 'OpenStreetMap', tier: campus.meta.tier, asOf: campus.meta.fetchedAt } : null;
-  const ecoMeta = eco ? { source: 'OpenStreetMap', tier: 'observed', asOf: eco.meta.fetchedAt ?? null } : null;
+  const ecoMeta = eco ? { source: 'OpenStreetMap', tier: 'fetched', asOf: eco.meta.fetchedAt ?? null } : null;
   const main = live?.road.data.filter(f => f.kind === 'main') ?? [];
   const exits = live?.road.data.filter(f => f.kind === 'exit') ?? [];
   const lots = eco?.parking.features.filter(f => f.properties.k !== 'bicycle_rental') ?? [];
   const cap = lots.filter(f => f.properties.capacity !== null);
   const seats = (dir?.categories.flatMap(c => c.entries) ?? [])
     .filter(e => e.capacity?.unit === 'seats' && !(e.note ?? '').startsWith('STALE')).sort((a, b) => b.capacity!.value - a.capacity!.value);
-  const bioMeta = eco ? { source: 'GBIF', tier: 'observed', asOf: eco.meta.fetchedAt ?? null } : null;
-  const dirMeta = dir ? { source: 'ncu.edu.tw', tier: 'observed', asOf: dir.meta.asOf } : null;
+  const bioMeta = eco ? { source: 'GBIF', tier: 'fetched', asOf: eco.meta.fetchedAt ?? null } : null;
+  const dirMeta = dir ? { source: 'ncu.edu.tw', tier: 'fetched', asOf: dir.meta.asOf } : null;
   const classes = eco ? Object.entries(eco.bio.byClass).filter(([k]) => CLASS[k]).sort((a, b) => b[1] - a[1]).slice(0, 4) : [];
 
   return (
@@ -109,6 +114,7 @@ export function TwinLens({ eco, ndvi, live, campus, dir, layers, onToggle, onFoc
           <button key={x.k} aria-pressed={layers.has(x.k)} onClick={() => onToggle(x.k)}>{pick(x.t, l)}</button>
         ))}
       </div>
+      <a className="tomap" href="#map">{l === 'en' ? '3D campus map ↓' : '立體校園地圖 ↓'}</a>
 
       {ndvi && ndviShift && (
         <div className="ndvi-bar" aria-label={l === 'en' ? 'NDVI year-on-year cell change' : 'NDVI 年變化分布'}>
@@ -147,10 +153,10 @@ export function TwinLens({ eco, ndvi, live, campus, dir, layers, onToggle, onFoc
               <Fragment key={f.id}>
                 {i > 0 && ' + '}
                 <button className="inline-jump" onClick={() => onFocusCoord?.([f.lon, f.lat])}>
-                  {n0(f.vph)}
+                  {n0(Math.round(f.vph / 60))}
                 </button>
-              </Fragment>))} {l === 'en' ? 'veh/h' : '輛/時'}</b>
-            <small><M m={live.road.meta} l={l} /> · {l === 'en' ? '1-min count ×60; serves all of Zhongli' : '1 分鐘車數 ×60；服務整個中壢'}</small>
+              </Fragment>))} {l === 'en' ? 'veh/min' : '輛/分'}</b>
+            <small><M m={live.road.meta} l={l} /> · {l === 'en' ? 'counted over the last minute; serves all of Zhongli' : '最近一分鐘計數；服務整個中壢'}</small>
           </li>
         )}
         {live && live.docks.data.length > 0 && (

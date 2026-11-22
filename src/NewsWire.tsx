@@ -24,7 +24,8 @@ function relAge(iso: string, l: L) {
 }
 
 export function NewsTicker({ news, l }: { news: NewsPayload | null; l: L }) {
-  const items = useMemo(() => (news?.items ?? []).slice(0, 20), [news]);
+  // The fixed wire is NCU-only: city politics and crime from the Taoyuan feed stay in the corpus panel, not on the console.
+  const items = useMemo(() => (news?.items ?? []).filter(it => it.scope === 'ncu').slice(0, 20), [news]);
   const [idx, setIdx] = useState(0);
   const [paused, setPaused] = useState(() =>
     typeof window !== 'undefined' && window.matchMedia('(prefers-reduced-motion: reduce)').matches,

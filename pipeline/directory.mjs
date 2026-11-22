@@ -24,6 +24,17 @@ const categories = dir.categories.map(c => ({ key: c.key, entries: c.entries.fil
   const stale = (e.note ?? '').startsWith('STALE') ? ((e.zh ?? '') + (e.note ?? '')).match(/20\d\d/)?.[0] ?? 'old' : null;
   return { zh: e.zh ?? null, en: e.en ?? null, url: e.url, phone: e.phone ?? null, tels: tels(e.phone), capacity: e.capacity ? { ...e.capacity, stale } : null, building: e.building ?? null, osm, note: e.note ?? null };
 }) }));
+// English building names: only where the directory entry IS the building (a dorm, or an entry whose own name is the
+// building's name), never a unit housed inside it. Existing OSM name:en wins. Run after cook.mjs and heights.mjs.
+const strip = s => (s ?? '').replace(/\s*\(.*\)$/, '').trim();
+let named = 0;
+for (const c of categories) for (const e of c.entries) {
+  if (!e.osm || !e.en || !(c.key === 'housing' || strip(e.zh) === strip(e.building))) continue;
+  const f = campus.buildings.features.find(b => b.properties.id === e.osm);
+  if (f && !f.properties.name_en) { f.properties.name_en = strip(e.en); named++; }
+}
+await writeFile(new URL('../public/data/campus.json', import.meta.url), JSON.stringify(campus));
+console.log({ named_en: named });
 await writeFile(new URL('../public/data/directory.json', import.meta.url), JSON.stringify({
   meta: { source: 'ncu.edu.tw official pages (each entry links its page)', tier: 'observed', asOf: dir.asOf }, categories }));
 console.log({ entries: categories.reduce((s, c) => s + c.entries.length, 0), dropped, labelled, linked });

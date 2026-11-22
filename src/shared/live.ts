@@ -9,7 +9,7 @@ export interface Live { docks: { meta: Meta; data: Dock[] }; road: { meta: Meta;
 /** YouBike stations on or at the edge of campus (station_no from the YouBike feed, positions checked against OSM amenity=bicycle_rental). */
 export const DOCKS = ['500304001', '500304032', '500305053'];
 /** Short English names; the feed's own English for 依仁堂 is an office name, not the place. */
-export const DOCK_EN: Record<string, string> = { '500304001': 'Library', '500304032': 'Yiren Hall', '500305053': 'Sports Center' };
+export const DOCK_EN: Record<string, string> = { '500304001': 'Library', '500304032': 'Yi-Reng Hall', '500305053': 'Sports Center' };
 
 /** National Freeway 1 at the Zhongli interchange (62K), the motorway exit that serves NCU. */
 /** Positions are the detectors' own PositionLon/Lat from the Freeway Bureau VD.xml static list. */
