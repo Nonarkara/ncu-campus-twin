@@ -75,7 +75,7 @@ export default {
 async function today(req: Request, url: URL, ctx: ExecutionContext): Promise<Response> {
   {
     const cache = (caches as unknown as { default: Cache }).default;
-    const key = new Request(url.origin + '/api/today');
+    const key = new Request(url.origin + '/api/today?v=2'); // bump when the payload shape changes
     const hit = await cache.match(key);
     if (hit) return hit;
     const [fc, aq] = await Promise.all([forecast(), air()]);

@@ -12,7 +12,7 @@ const T = {
   rule: ['Rule', '規則'], loading: ['Loading open feeds…', '讀取開放資料中…'], err: ['Feeds unreachable. Nothing shown is guessed.', '資料源無法連線，不顯示任何推估值。'],
 } as const;
 const tr = (k: keyof typeof T, l: L) => T[k][l === 'en' ? 0 : 1];
-const pick = (p: readonly [string, string], l: L) => (l === 'en' ? p[0] : p[1]);
+const pick = (p: readonly [string, string] | string, l: L) => (typeof p === 'string' ? p : l === 'en' ? p[0] : p[1]);
 
 const TIER = { live: '即時', forecast: '預報', modeled: '模式', schedule: '班表', unavailable: '無資料' } as Record<string, string>;
 function age(iso: string | null, l: L) {
