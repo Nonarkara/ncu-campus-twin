@@ -5,6 +5,7 @@
   "scripts": {
     "cook": "node pipeline/cook.mjs",
     "heights": "node pipeline/heights.mjs",
+    "surroundings": "node pipeline/surroundings.mjs",
     "news": "node pipeline/news.mjs",
     "dev": "vite",
     "build": "tsc -b && vite build",

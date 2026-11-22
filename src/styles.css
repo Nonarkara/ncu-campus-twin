@@ -172,7 +172,7 @@ button { cursor: pointer; }
 .mapctl button { background: var(--bg); padding: 6px 10px; min-height: 32px; font-size: var(--t-micro); color: var(--dim); }
 .mapctl button[aria-pressed='true'] { color: var(--ink); }
 .mapctl button:hover { color: var(--ink); }
-.legend { position: absolute; left: 12px; top: 12px; max-width: calc(100% - 190px); font-size: var(--t-micro); color: var(--dim); background: var(--bg); padding: 4px 8px; border: 1px solid var(--line); }
+.legend { position: absolute; left: 12px; top: 12px; max-width: calc(100% - 245px); font-size: var(--t-micro); color: var(--dim); background: var(--bg); padding: 4px 8px; border: 1px solid var(--line); }
 .maplibregl-ctrl-attrib { background: rgba(10, 14, 20, .86) !important; color: var(--dim) !important; font-size: var(--t-micro); }
 .maplibregl-ctrl-attrib a { color: var(--dim) !important; }
 .maplibregl-ctrl-attrib-button { filter: invert(0.8); }

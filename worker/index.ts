@@ -69,7 +69,7 @@ const SECURITY: Record<string, string> = {
   'content-security-policy': [
     "default-src 'self'", "script-src 'self'", "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com",
     "font-src https://fonts.gstatic.com", "img-src 'self' data: blob: https://wmts.nlsc.gov.tw",
-    "connect-src 'self' https://wmts.nlsc.gov.tw https://apis.youbike.com.tw", "worker-src 'self' blob:", "frame-ancestors 'none'", "base-uri 'none'", "form-action 'none'",
+    "connect-src 'self' https://wmts.nlsc.gov.tw https://apis.youbike.com.tw https://tiles.openfreemap.org", "worker-src 'self' blob:", "frame-ancestors 'none'", "base-uri 'none'", "form-action 'none'",
   ].join('; '),
 };
 function secure(res: Response) {

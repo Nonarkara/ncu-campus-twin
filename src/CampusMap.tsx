@@ -30,6 +30,7 @@ const EMPTY_FC = { type: 'FeatureCollection' as const, features: [] };
 
 const style: StyleSpecification = {
   version: 8,
+  glyphs: 'https://tiles.openfreemap.org/fonts/{fontstack}/{range}.pbf',
   sources: {
     photo: {
       type: 'raster',
@@ -80,6 +81,7 @@ export function CampusMap({
   const map = useRef<MLMap | null>(null);
   const [ready, setReady] = useState(false);
   const [photo, setPhoto] = useState(false);
+  const [showLabels, setShowLabels] = useState(true);
   const [hoverText, setHoverText] = useState<string | null>(null);
 
   const onSelectBuildingRef = useRef(onSelectBuilding);
@@ -93,10 +95,11 @@ export function CampusMap({
       style,
       bounds: BOUNDS,
       fitBoundsOptions: { padding: 28 },
-      minZoom: 14,
+      minZoom: 13.5,
       maxZoom: 19,
-      maxBounds: [121.170, 24.955, 121.212, 24.982],
+      maxBounds: [121.168, 24.952, 121.216, 24.982],
       renderWorldCopies: false,
+      localIdeographFontFamily: "'Noto Sans TC', 'PingFang TC', sans-serif",
       attributionControl: { compact: true },
       dragRotate: false,
       pitchWithRotate: false,
@@ -115,12 +118,32 @@ export function CampusMap({
 
     m.on('load', () => {
       m.addSource('ctx', { type: 'geojson', data: EMPTY_FC });
+      m.addSource('sur-bld', { type: 'geojson', data: EMPTY_FC });
+      m.addSource('sur-roads', { type: 'geojson', data: EMPTY_FC });
+      m.addSource('sur-waters', { type: 'geojson', data: EMPTY_FC });
+      m.addSource('bld-labels', { type: 'geojson', data: EMPTY_FC });
       m.addSource('campus', { type: 'geojson', data: EMPTY_FC, attribution: '© OpenStreetMap contributors' });
       m.addSource('bld', { type: 'geojson', data: EMPTY_FC, promoteId: 'id' });
       m.addSource('stops', { type: 'geojson', data: EMPTY_FC });
       m.addSource('radials', { type: 'geojson', data: EMPTY_FC });
       m.addSource('substation', { type: 'geojson', data: EMPTY_FC });
       m.addSource('catchment', { type: 'geojson', data: EMPTY_FC });
+
+      // Wider Zhongli / Freeway 1 urban fabric (surrounding buildings, waterways, arterial hierarchy)
+      m.addLayer({ id: 'sur-waters', type: 'line', source: 'sur-waters', paint: { 'line-color': INK + '0.16)', 'line-width': ['match', ['get', 'k'], 'river', 2.5, 'canal', 1.5, 1] } });
+      m.addLayer({ id: 'sur-bld', type: 'fill', source: 'sur-bld', paint: { 'fill-color': INK + '0.055)' } });
+      m.addLayer({ id: 'sur-bld-line', type: 'line', source: 'sur-bld', paint: { 'line-color': INK + '0.12)', 'line-width': 0.5 } });
+      m.addLayer({ id: 'sur-roads-casing', type: 'line', source: 'sur-roads', filter: ['==', ['get', 'k'], 'motorway'],
+        paint: { 'line-color': '#0a0e14', 'line-width': 5.5 } });
+      m.addLayer({
+        id: 'sur-roads',
+        type: 'line',
+        source: 'sur-roads',
+        paint: {
+          'line-color': ['match', ['get', 'k'], 'motorway', INK + '0.52)', ['motorway_link', 'trunk', 'primary'], INK + '0.38)', 'secondary', INK + '0.30)', INK + '0.24)'],
+          'line-width': ['match', ['get', 'k'], 'motorway', 3.2, ['trunk', 'primary'], 2.4, 'motorway_link', 2.0, 'secondary', 1.8, 1.2],
+        },
+      });
 
       m.addLayer({ id: 'water', type: 'fill', source: 'ctx', filter: ['==', ['get', 'k'], 'water'], paint: { 'fill-color': INK + '0.08)' } });
       m.addLayer({ id: 'pitch', type: 'line', source: 'ctx', filter: ['in', ['get', 'k'], ['literal', ['pitch', 'track', 'park']]], paint: { 'line-color': INK + '0.13)', 'line-width': 1 } });
@@ -231,6 +254,57 @@ export function CampusMap({
           'circle-stroke-width': 1,
         },
       });
+
+      // Crisp architectural labels: major roads along lines + major campus buildings
+      m.addLayer({
+        id: 'sur-road-labels',
+        type: 'symbol',
+        source: 'sur-roads',
+        minzoom: 13.5,
+        filter: ['has', 'name'],
+        layout: {
+          'symbol-placement': 'line',
+          'text-field': ['get', 'name'],
+          'text-font': ['Noto Sans Regular'],
+          'text-size': ['match', ['get', 'k'], 'motorway', 11, 10],
+          'symbol-spacing': 320,
+          'text-max-angle': 30,
+        },
+        paint: {
+          'text-color': '#9aa7b4',
+          'text-halo-color': '#0a0e14',
+          'text-halo-width': 1.5,
+        },
+      });
+      m.addLayer({
+        id: 'campus-bld-labels',
+        type: 'symbol',
+        source: 'bld-labels',
+        minzoom: 15.1,
+        layout: {
+          'text-field': ['get', 'name'],
+          'text-font': ['Noto Sans Regular'],
+          'text-size': 10.5,
+          'text-padding': 6,
+          'text-optional': true,
+        },
+        paint: {
+          'text-color': 'rgba(230,237,243,0.86)',
+          'text-halo-color': '#0a0e14',
+          'text-halo-width': 1.5,
+        },
+      });
+
+      // Load wider Zhongli / Freeway 1 surroundings asynchronously (non-blocking)
+      fetch('/data/surroundings.json')
+        .then(r => r.json())
+        .then((sur: any) => {
+          (m.getSource('sur-bld') as GeoJSONSource | undefined)?.setData(sur.buildings ?? EMPTY_FC);
+          (m.getSource('sur-roads') as GeoJSONSource | undefined)?.setData(sur.roads ?? EMPTY_FC);
+          (m.getSource('sur-waters') as GeoJSONSource | undefined)?.setData(sur.waters ?? EMPTY_FC);
+          (m.getSource('bld-labels') as GeoJSONSource | undefined)?.setData(sur.labels ?? EMPTY_FC);
+        })
+        .catch(() => {});
 
       for (const id of ['docks', 'vd', 'bio']) {
         m.on('mousemove', id, (e: any) => { const f = e.features?.[0]; if (f) setHoverText(JSON.stringify({ kind: id, p: f.properties })); });
@@ -409,7 +483,9 @@ export function CampusMap({
     }
 
     m.setLayoutProperty('photo', 'visibility', photo ? 'visible' : 'none');
-  }, [lens, ready, photo, campus, selectedBuildingId, portfolioIds, selectedStopName]);
+    m.setLayoutProperty('sur-road-labels', 'visibility', showLabels ? 'visible' : 'none');
+    m.setLayoutProperty('campus-bld-labels', 'visibility', showLabels ? 'visible' : 'none');
+  }, [lens, ready, photo, showLabels, campus, selectedBuildingId, portfolioIds, selectedStopName]);
 
   // Twin data
   useEffect(() => {
@@ -514,6 +590,7 @@ export function CampusMap({
       <div className="mapctl">
         <button aria-pressed={!photo} onClick={() => setPhoto(false)}>{l === 'en' ? 'Plan' : '平面'}</button>
         <button aria-pressed={photo} onClick={() => setPhoto(true)}>{l === 'en' ? 'Photo' : '航照'}</button>
+        <button aria-pressed={showLabels} onClick={() => setShowLabels(s => !s)}>{l === 'en' ? 'Labels' : '標註'}</button>
         <button onClick={resetView} aria-label={l === 'en' ? 'Reset map view' : '重置地圖視角'}>{l === 'en' ? 'Reset' : '重置'}</button>
       </div>
       <div className="legend">{legend}</div>
