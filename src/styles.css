@@ -4,7 +4,7 @@
   --amber: #f59e0b; --surface: rgba(230, 237, 243, .035);
   --t-hero: 32px; --t-body: 14px; --t-micro: 11px;
   --f: 'Jost', 'Noto Sans TC', sans-serif;
-  --panel: 420px;
+  --panel: 400px;
 }
 * { box-sizing: border-box; margin: 0; border-radius: 0 !important; box-shadow: none !important; }
 html, body, #root { height: 100%; }
@@ -187,3 +187,10 @@ details.off ul { list-style: none; padding: 0; }
 .dir .meta .cap { color: var(--ink); }
 @media (max-width: 520px) { .search-wrap { display: none; } .tabs { gap: 12px; } }
 @media (hover: hover) and (pointer: fine) { .chips button { min-height: 24px; padding: 2px 7px; } }
+
+.dir .meta button { min-height: 32px; }
+details.cat summary { cursor: pointer; list-style: none; display: flex; align-items: center; gap: 6px; min-height: 32px; border-top: 1px solid var(--line); }
+details.cat summary::-webkit-details-marker { display: none; }
+details.cat summary::after { content: '›'; margin-left: auto; }
+details.cat[open] summary::after { content: '⌄'; }
+@media (hover: hover) and (pointer: fine) { .dir .meta button { min-height: 24px; } }

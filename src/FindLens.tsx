@@ -3,12 +3,17 @@ import { useMemo, useState } from 'react';
 
 type L = 'en' | 'zh';
 export interface Entry { zh: string | null; en: string | null; url: string; phone: string | null; building: string | null; osm: string | null; note: string | null;
-  capacity: { value: number; unit: string; source: string } | null }
+  capacity: { value: number; unit: string; source: string; stale: string | null } | null; tels: { label: string; href: string }[] }
 export interface Directory { meta: { source: string; asOf: string }; categories: { key: string; entries: Entry[] }[] }
 
 const CAT: Record<string, [string, string]> = {
   safety: ['Safety', '安全'], academic: ['Academic', '學術單位'], admin: ['Offices', '行政單位'],
   research: ['Research', '研究中心'], housing: ['Housing', '住宿'], facility: ['Facilities', '設施'],
+};
+const WORDS: Record<string, string> = {
+  safety: 'safety security emergency 安全 校安 警衛 緊急', academic: 'academic college department institute 學術 學院 系 所',
+  admin: 'office admin 行政 處 室', research: 'research centre center 研究 中心', housing: 'housing dorm dormitory residence 住宿 宿舍 舍',
+  facility: 'facility library gym parking seats 設施 圖書館 停車 場館',
 };
 const ORDER = ['safety', 'academic', 'admin', 'research', 'housing', 'facility'];
 const UNIT: Record<string, [string, string]> = { seats: ['seats', '席'], beds: ['beds', '床'], spaces: ['spaces', '格'] };
@@ -20,11 +25,12 @@ export function FindLens({ dir, onFocusBuilding, l }: { dir: Directory | null; o
   const hits = useMemo(() => {
     const s = q.trim().toLowerCase();
     return cats.filter(c => !cat || c.key === cat).map(c => ({ ...c, entries: c.entries.filter(e =>
-      !s || `${e.zh ?? ''} ${e.en ?? ''} ${e.building ?? ''}`.toLowerCase().includes(s)) })).filter(c => c.entries.length);
+      !s || `${e.zh ?? ''} ${e.en ?? ''} ${e.building ?? ''} ${WORDS[c.key] ?? ''}`.toLowerCase().includes(s)) })).filter(c => c.entries.length);
   }, [cats, q, cat]);
   if (!dir) return <p className="note">{l === 'en' ? 'Loading directory…' : '讀取名錄中…'}</p>;
   const total = cats.reduce((s, c) => s + c.entries.length, 0);
-  const withCap = cats.flatMap(c => c.entries).filter(e => e.capacity).length;
+  const withCap = cats.flatMap(c => c.entries).filter(e => e.capacity && !e.capacity.stale).length;
+  const open = !!q.trim() || !!cat;
 
   return (
     <>
@@ -44,8 +50,8 @@ export function FindLens({ dir, onFocusBuilding, l }: { dir: Directory | null; o
         ))}
       </div>
       {hits.map(c => (
-        <section key={c.key}>
-          <h2 className="h">{CAT[c.key]?.[l === 'en' ? 0 : 1] ?? c.key}</h2>
+        <details key={c.key + String(open)} className="cat" open={open || c.key === 'safety'}>
+          <summary className="h">{CAT[c.key]?.[l === 'en' ? 0 : 1] ?? c.key} <small>{c.entries.length}</small></summary>
           <ul className="dir">
             {c.entries.map((e, i) => {
               const name = l === 'en' ? e.en ?? e.zh : e.zh ?? e.en;
@@ -56,16 +62,20 @@ export function FindLens({ dir, onFocusBuilding, l }: { dir: Directory | null; o
                   {alt && <span className="alt">{alt}</span>}
                   <span className="meta">
                     {e.capacity && <a className="cap" href={e.capacity.source} target="_blank" rel="noopener noreferrer">
-                      {e.capacity.value.toLocaleString('en-US')} {UNIT[e.capacity.unit]?.[l === 'en' ? 0 : 1] ?? e.capacity.unit}</a>}
-                    {e.phone && <a href={`tel:${e.phone.replace(/[^0-9#+]/g, '').replace('#', ',')}`}>{e.phone}</a>}
+                      {e.capacity.value.toLocaleString('en-US')} {UNIT[e.capacity.unit]?.[l === 'en' ? 0 : 1] ?? e.capacity.unit}
+                      {e.capacity.stale && (l === 'en' ? ` (${e.capacity.stale}, stale)` : `（${e.capacity.stale} 年，過時）`)}</a>}
+                    {e.tels?.length === 1 && <a href={e.tels[0].href}>{e.phone}</a>}
+                    {(e.tels?.length ?? 0) > 1 && e.tels.map(t => <a key={t.href} href={t.href}>{t.label}</a>)}
+                    {!e.tels?.length && e.phone && <span>{e.phone}</span>}
                     {e.osm && <button onClick={() => onFocusBuilding(e.osm!)}>{l === 'en' ? 'Map' : '地圖'} ›</button>}
                   </span>
                 </li>
               );
             })}
           </ul>
-        </section>
+        </details>
       ))}
+      {hits.length === 0 && <p className="note">{l === 'en' ? `No entry matches “${q}”.` : `沒有符合「${q}」的項目。`}</p>}
       <p className="note">{l === 'en'
         ? '“Map” appears only where the official building name matches a mapped footprint. Dorm bed counts and current car parking are not published.'
         : '僅在官方建物名稱與地圖輪廓相符時顯示「地圖」。宿舍床位與現行汽車格數未公開。'}</p>

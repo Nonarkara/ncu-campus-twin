@@ -65,7 +65,10 @@ function secure(res: Response) {
 }
 
 export default {
-  async scheduled(_e: ScheduledController, env: Env, ctx: ExecutionContext) { ctx.waitUntil(pullRoad(env)); },
+  async scheduled(_e: ScheduledController, env: Env, ctx: ExecutionContext) {
+    // Record why a pull failed so /api/live can say so; the last good reading stays in place.
+    ctx.waitUntil(pullRoad(env).catch(e => env.LIVE.put('road_err', `${new Date().toISOString()} ${String((e as Error)?.message ?? e).slice(0, 160)}`)));
+  },
   async fetch(req: Request, env: Env, ctx: ExecutionContext) {
     const url = new URL(req.url);
     if (url.protocol === 'http:' && url.hostname !== 'localhost' && !env.DEV) { url.protocol = 'https:'; return Response.redirect(url.toString(), 301); }
@@ -89,7 +92,9 @@ async function pullRoad(env: Env) {
 /** Last good detector reading. Its own collection time travels with it, so the page shows its real age. */
 async function live(env: Env): Promise<Response> {
   const data: Live['road']['data'] = JSON.parse((await env.LIVE.get('road', { cacheTtl: 60 })) ?? '[]');
-  const body: Pick<Live, 'road'> = {
+  const lastError = await env.LIVE.get('road_err', { cacheTtl: 60 });
+  const body: Pick<Live, 'road'> & { lastError?: string } = {
+    lastError: lastError ?? undefined,
     road: { data, meta: { source: ROAD_SRC, tier: data.length ? 'live' : 'unavailable', asOf: data.map(f => f.at).sort().at(-1) ?? null } },
   };
   return new Response(JSON.stringify(body), { headers: { 'content-type': 'application/json', 'cache-control': 'public, max-age=60' } });

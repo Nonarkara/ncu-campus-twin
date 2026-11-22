@@ -1,6 +1,7 @@
 // Raw → cooked directory. Validates every entry (name + http(s) URL), links an entry to an OSM footprint
 // only when its building label equals an OSM building name exactly. No fuzzy matching: a wrong link is worse than none.
 import { readFile, writeFile } from 'node:fs/promises';
+import { tels } from './tels.mjs';
 const dir = JSON.parse(await readFile(new URL('../var/raw/directory/directory.json', import.meta.url), 'utf8'));
 const campus = JSON.parse(await readFile(new URL('../public/data/campus.json', import.meta.url), 'utf8'));
 const byName = new Map();
@@ -17,8 +18,11 @@ const categories = dir.categories.map(c => ({ key: c.key, entries: c.entries.fil
   const ok = (e.zh || e.en) && /^https?:\/\//.test(e.url ?? ''); if (!ok) dropped++; return ok;
 }).map(e => {
   if (e.building) labelled++;
-  const osm = e.building ? byName.get(ALIAS[e.building.trim()] ?? e.building.trim()) ?? null : null; if (osm) linked++;
-  return { zh: e.zh ?? null, en: e.en ?? null, url: e.url, phone: e.phone ?? null, capacity: e.capacity ?? null, building: e.building ?? null, osm, note: e.note ?? null };
+  // An entry whose own note says its building is assumed is not linked to a footprint (GSH: no unverified pins).
+  const assumed = /assum|verify/i.test(e.note ?? '');
+  const osm = e.building && !assumed ? byName.get(ALIAS[e.building.trim()] ?? e.building.trim()) ?? null : null; if (osm) linked++;
+  const stale = (e.note ?? '').startsWith('STALE') ? ((e.zh ?? '') + (e.note ?? '')).match(/20\d\d/)?.[0] ?? 'old' : null;
+  return { zh: e.zh ?? null, en: e.en ?? null, url: e.url, phone: e.phone ?? null, tels: tels(e.phone), capacity: e.capacity ? { ...e.capacity, stale } : null, building: e.building ?? null, osm, note: e.note ?? null };
 }) }));
 await writeFile(new URL('../public/data/directory.json', import.meta.url), JSON.stringify({
   meta: { source: 'ncu.edu.tw official pages (each entry links its page)', tier: 'observed', asOf: dir.asOf }, categories }));

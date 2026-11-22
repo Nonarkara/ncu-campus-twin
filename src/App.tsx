@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import type { Today, Meta } from './shared/today';
 import { runs, taipei, upcoming } from './shared/today';
 import {
@@ -628,6 +628,9 @@ export function App() {
     return () => clearInterval(id);
   }, []);
 
+  // On phone the map sits under the panel: bring it into view so the action has visible feedback.
+  const shownForLayers = useRef(false); // first layer toggle on phone reveals the map once, later ones don't yank the page
+  const showMap = () => { if (window.innerWidth < 900) document.getElementById('map')?.scrollIntoView({ behavior: window.matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth' }); };
   const focusBuilding = (id: string) => {
     setSelectedBuildingId(id);
     setQuery('');
@@ -736,9 +739,9 @@ export function App() {
           <TodayLens t={today} err={todayErr} campus={campus} onSelectBuilding={focusBuilding} l={l} />
         )}
         {lens === 'twin' && (
-          <TwinLens eco={eco} ndvi={ndvi as Ndvi | null} live={live} campus={campus} dir={dir} layers={layers} onToggle={toggleLayer} l={l} />
+          <TwinLens eco={eco} ndvi={ndvi as Ndvi | null} live={live} campus={campus} dir={dir} layers={layers} onToggle={k => { toggleLayer(k); if (!shownForLayers.current) { shownForLayers.current = true; showMap(); } }} l={l} />
         )}
-        {lens === 'find' && <FindLens dir={dir} onFocusBuilding={focusBuilding} l={l} />}
+        {lens === 'find' && <FindLens dir={dir} onFocusBuilding={id => { focusBuilding(id); showMap(); }} l={l} />}
         {lens === 'power' && (
           <PowerLens
             today={today}

@@ -16,6 +16,7 @@ import {
   polygonCentroid,
   type CampusData,
 } from './shared/campus';
+import { DOCK_EN } from './shared/live';
 
 setWorkerUrl(workerUrl);
 
@@ -230,6 +231,8 @@ export function CampusMap({
       for (const id of ['docks', 'vd', 'bio']) {
         m.on('mousemove', id, (e: any) => { const f = e.features?.[0]; if (f) setHoverText(JSON.stringify({ kind: id, p: f.properties })); });
         m.on('mouseleave', id, () => setHoverText(null));
+        // touch has no hover: a tap shows the same line
+        m.on('click', id, (e: any) => { const f = e.features?.[0]; if (f) setHoverText(JSON.stringify({ kind: id, p: f.properties })); });
       }
       let hovered: string | null = null;
       m.on('mousemove', 'bld', (e: any) => {
@@ -453,12 +456,12 @@ export function CampusMap({
     const parsed = JSON.parse(hoverText);
     if (parsed.kind === 'docks') {
       const d = parsed.p;
-      legend = `YouBike · ${l === 'en' ? d.en : d.zh} · ${d.bikes} ${l === 'en' ? 'bikes' : '車'} · ${d.free}/${d.capacity} ${l === 'en' ? 'docks free' : '空位'}`;
+      legend = `YouBike · ${l === 'en' ? DOCK_EN[d.id] ?? d.en : d.zh} · ${d.bikes} ${l === 'en' ? 'bikes' : '車'} · ${d.free}/${d.capacity} ${l === 'en' ? 'docks free' : '空位'}`;
     } else if (parsed.kind === 'vd') {
       const f = parsed.p; const lab = String(f.label).split(' / ');
       legend = `${l === 'en' ? lab[0] : lab[1]} · ${f.speed ?? '—'} km/h · ${Number(f.vph).toLocaleString('en-US')} ${l === 'en' ? 'veh/h' : '輛/時'} · Freeway Bureau VD`;
     } else if (parsed.kind === 'bio') {
-      legend = `${parsed.p.vn ?? parsed.p.sp} · ${parsed.p.sp} · ${parsed.p.y} · ±${parsed.p.u} m · GBIF`;
+      legend = `${parsed.p.vn && parsed.p.vn !== parsed.p.sp ? parsed.p.vn + ' · ' : ''}${parsed.p.sp} · ${parsed.p.y} · ±${parsed.p.u} m · GBIF`;
     } else if (parsed.kind === 'stop') {
       legend = `${l === 'en' ? 'Bus stop' : '公車站'} · ${parsed.name}`;
     } else {
@@ -476,6 +479,8 @@ export function CampusMap({
       : (l === 'en'
         ? 'Click any roof to inspect or add to microgrid · ring = HV substation'
         : '點選任一建物檢視或加入微電網 · 圓環 = 高壓變電站');
+  } else if (lens === 'find') {
+    legend = l === 'en' ? 'Tap “Map ›” in the directory to locate a building · dashed = OSM boundary' : '點名錄中的「地圖 ›」定位建物 · 虛線 = OSM 校界';
   } else if (lens === 'twin') {
     legend = l === 'en'
       ? 'Brighter = greener (Sentinel-2) · amber = NDVI down ≥0.15 vs a year ago · drag to rotate · 3D only where floors are stated'
