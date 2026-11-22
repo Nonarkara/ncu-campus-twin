@@ -6,7 +6,13 @@ export type Tier = 'live' | 'forecast' | 'modeled' | 'schedule' | 'unavailable';
 export interface Meta { source: string; tier: Tier; asOf: string | null }
 export interface Feed<T> { data: T | null; meta: Meta }
 
-export interface Forecast { time: string[]; precip: number[]; prob: number[]; temp: number[]; gust: number[]; uv: number[] }
+export interface Forecast {
+  time: string[]; precip: number[]; prob: number[]; temp: number[]; gust: number[]; uv: number[];
+  ghi?: number[]; // shortwave_radiation W/m², optional for backwards compatibility
+}
+export interface HourlyPoint {
+  time: string; hm: string; temp: number; precip: number; prob: number; gust: number; uv: number; ghi: number | null;
+}
 export interface Air { pm25: number; n: number; observedAt: string }
 
 export type Level = 'act' | 'watch';
@@ -15,7 +21,7 @@ export interface Item {
   owner: string; by: string | null; rule: string; meta: Meta;
 }
 export interface Steady { id: string; label: [string, string]; value: [string, string]; meta: Meta }
-export interface Today { now: string; items: Item[]; steady: Steady[]; slots: Slot[] }
+export interface Today { now: string; items: Item[]; steady: Steady[]; slots: Slot[]; hourly: HourlyPoint[]; forecastMeta: Meta }
 export interface Slot { id: string; label: [string, string]; owner: string; needs: string }
 
 export const RULES = {
@@ -53,6 +59,7 @@ export function buildToday(now: Date, fc: Feed<Forecast>, air: Feed<Air>): Today
   const { hm, weekend } = taipei(now);
   const items: Item[] = [];
   const steady: Steady[] = [];
+  const hourly: HourlyPoint[] = [];
   const ownerOps = '總務處 General Affairs';
   const ownerSafety = '環安中心 Env. & Safety';
 
@@ -60,6 +67,18 @@ export function buildToday(now: Date, fc: Feed<Forecast>, air: Feed<Air>): Today
     const f = fc.data;
     const nowIso = taipei(now).date + 'T' + hm;
     const idx = f.time.map((t, i) => i).filter(i => f.time[i] >= nowIso.slice(0, 13)).slice(0, 24);
+    for (const i of idx) {
+      hourly.push({
+        time: f.time[i],
+        hm: fmtH(f.time[i]),
+        temp: f.temp[i] ?? 0,
+        precip: f.precip[i] ?? 0,
+        prob: f.prob[i] ?? 0,
+        gust: f.gust[i] ?? 0,
+        uv: f.uv[i] ?? 0,
+        ghi: f.ghi && typeof f.ghi[i] === 'number' ? f.ghi[i] : null,
+      });
+    }
     const next12 = idx.slice(0, 12);
     const day = idx.reduce((s, i) => s + (f.precip[i] ?? 0), 0);
     const peakRain = next12.reduce((m, i) => (f.precip[i] > (f.precip[m] ?? -1) ? i : m), next12[0]);
@@ -116,5 +135,5 @@ export function buildToday(now: Date, fc: Feed<Forecast>, air: Feed<Air>): Today
     { id: 'warnings', label: ['CWA warnings & earthquakes', '氣象署警特報與地震'], owner: '—', needs: 'free CWA API key' },
     { id: 'livebus', label: ['Live bus positions', '公車即時動態'], owner: '—', needs: 'free TDX API key' },
   ];
-  return { now: now.toISOString(), items, steady, slots };
+  return { now: now.toISOString(), items, steady, slots, hourly, forecastMeta: fc.meta };
 }

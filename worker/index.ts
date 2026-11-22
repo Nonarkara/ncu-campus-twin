@@ -14,10 +14,10 @@ async function forecast(): Promise<Feed<Forecast>> {
   const source = 'Open-Meteo forecast';
   try {
     const j = await getJson(`https://api.open-meteo.com/v1/forecast?latitude=${LAT}&longitude=${LON}&timezone=Asia%2FTaipei&forecast_days=2` +
-      '&hourly=precipitation,precipitation_probability,temperature_2m,wind_gusts_10m,uv_index&wind_speed_unit=ms');
+      '&hourly=precipitation,precipitation_probability,temperature_2m,wind_gusts_10m,uv_index,shortwave_radiation&wind_speed_unit=ms');
     const h = j.hourly;
     return { meta: { source, tier: 'forecast', asOf: new Date().toISOString() },
-      data: { time: h.time, precip: h.precipitation, prob: h.precipitation_probability, temp: h.temperature_2m, gust: h.wind_gusts_10m, uv: h.uv_index } };
+      data: { time: h.time, precip: h.precipitation, prob: h.precipitation_probability, temp: h.temperature_2m, gust: h.wind_gusts_10m, uv: h.uv_index, ghi: h.shortwave_radiation } };
   } catch { return { data: null, meta: { source, tier: 'unavailable', asOf: null } }; }
 }
 
@@ -75,7 +75,7 @@ export default {
 async function today(req: Request, url: URL, ctx: ExecutionContext): Promise<Response> {
   {
     const cache = (caches as unknown as { default: Cache }).default;
-    const key = new Request(url.origin + '/api/today?v=2'); // bump when the payload shape changes
+    const key = new Request(url.origin + '/api/today?v=3'); // bump when the payload shape changes
     const hit = await cache.match(key);
     if (hit) return hit;
     const [fc, aq] = await Promise.all([forecast(), air()]);
