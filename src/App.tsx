@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { Fragment, useEffect, useMemo, useRef, useState } from 'react';
 import type { Today, Meta } from './shared/today';
 import { runs, taipei, upcoming } from './shared/today';
 import {
@@ -628,11 +628,14 @@ function MoveLens({
           <li>
             <span>{l === 'en' ? 'Freeway 1 (9025A corridor)' : '國道 1 號（9025A 路廊）'}</span>
             <b>
-              {mainRoad.map(f => (
-                <button key={f.id} className={`inline-jump ${f.speed !== null && f.speed < SLOW_KMH ? 'act' : ''}`}
-                  onClick={() => onFocusCoord([f.lon, f.lat])}>
-                  {f.dir === 'S' ? (l === 'en' ? 'S ' : '南 ') : (l === 'en' ? ' N ' : ' 北 ')}{f.speed ?? '—'}
-                </button>
+              {mainRoad.map((f, i) => (
+                <Fragment key={f.id}>
+                  {i > 0 && ' · '}
+                  <button className={`inline-jump ${f.speed !== null && f.speed < SLOW_KMH ? 'act' : ''}`}
+                    onClick={() => onFocusCoord([f.lon, f.lat])}>
+                    {f.dir === 'S' ? (l === 'en' ? 'S ' : '南 ') : (l === 'en' ? 'N ' : '北 ')}{f.speed ?? '—'}
+                  </button>
+                </Fragment>
               ))} km/h
             </b>
             <small><MetaLine m={live.road.meta} l={l} /></small>
@@ -643,9 +646,12 @@ function MoveLens({
             <span>{l === 'en' ? 'YouBike docks' : 'YouBike 場站'}</span>
             <b>
               {live.docks.data.map((d, i) => (
-                <button key={d.id} className={`inline-jump ${d.bikes <= 2 ? 'act' : ''}`} onClick={() => onFocusCoord([d.lon, d.lat])}>
-                  {i ? ' · ' : ''}{l === 'en' ? DOCK_EN[d.id] ?? d.en : d.zh.replace('中央大學', '')} {d.bikes}/{d.capacity}
-                </button>
+                <Fragment key={d.id}>
+                  {i > 0 && ' · '}
+                  <button className={`inline-jump ${d.bikes <= 2 ? 'act' : ''}`} onClick={() => onFocusCoord([d.lon, d.lat])}>
+                    {l === 'en' ? DOCK_EN[d.id] ?? d.en : d.zh.replace('中央大學', '')} {d.bikes}/{d.capacity}
+                  </button>
+                </Fragment>
               ))}
             </b>
             <small><MetaLine m={live.docks.meta} l={l} /></small>

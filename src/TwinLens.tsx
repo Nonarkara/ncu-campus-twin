@@ -1,5 +1,6 @@
 // Twin lens: what the campus holds and what flows through it — green cover, water, wildlife, docks, roads, built volume.
 // Every row carries its source, tier and age; a feed that fails renders no row.
+import { Fragment } from 'react';
 import type { Meta } from './shared/today';
 import type { Live } from './shared/live';
 import { SLOW_KMH, DOCK_EN } from './shared/live';
@@ -123,11 +124,14 @@ export function TwinLens({ eco, ndvi, live, campus, dir, layers, onToggle, onFoc
         {main.length > 0 && live && (
           <li>
             <span>{l === 'en' ? 'Freeway 1 at Zhongli exit' : '國道 1 號・中壢交流道'}</span>
-            <b>{main.map(f => (
-              <button key={f.id} className={`inline-jump ${f.speed !== null && f.speed < SLOW_KMH ? 'act' : ''}`}
-                onClick={() => onFocusCoord?.([f.lon, f.lat])}>
-                {f.dir === 'S' ? (l === 'en' ? 'S ' : '南 ') : (l === 'en' ? ' N ' : ' 北 ')}{f.speed ?? '—'}
-              </button>))} km/h</b>
+            <b>{main.map((f, i) => (
+              <Fragment key={f.id}>
+                {i > 0 && ' · '}
+                <button className={`inline-jump ${f.speed !== null && f.speed < SLOW_KMH ? 'act' : ''}`}
+                  onClick={() => onFocusCoord?.([f.lon, f.lat])}>
+                  {f.dir === 'S' ? (l === 'en' ? 'S ' : '南 ') : (l === 'en' ? 'N ' : '北 ')}{f.speed ?? '—'}
+                </button>
+              </Fragment>))} km/h</b>
             <small><M m={live.road.meta} l={l} /></small>
           </li>
         )}
@@ -135,9 +139,12 @@ export function TwinLens({ eco, ndvi, live, campus, dir, layers, onToggle, onFoc
           <li>
             <span>{l === 'en' ? 'Zhongli exit ramps' : '中壢出口匝道'}</span>
             <b>{exits.map((f, i) => (
-              <button key={f.id} className="inline-jump" onClick={() => onFocusCoord?.([f.lon, f.lat])}>
-                {i ? ' + ' : ''}{n0(f.vph)}
-              </button>))} {l === 'en' ? 'veh/h' : '輛/時'}</b>
+              <Fragment key={f.id}>
+                {i > 0 && ' + '}
+                <button className="inline-jump" onClick={() => onFocusCoord?.([f.lon, f.lat])}>
+                  {n0(f.vph)}
+                </button>
+              </Fragment>))} {l === 'en' ? 'veh/h' : '輛/時'}</b>
             <small><M m={live.road.meta} l={l} /> · {l === 'en' ? '1-min count ×60; serves all of Zhongli' : '1 分鐘車數 ×60；服務整個中壢'}</small>
           </li>
         )}
@@ -145,9 +152,12 @@ export function TwinLens({ eco, ndvi, live, campus, dir, layers, onToggle, onFoc
           <li>
             <span>{l === 'en' ? 'YouBike bikes / docks' : 'YouBike 車輛／車柱'}</span>
             <b>{live.docks.data.map((d, i) => (
-              <button key={d.id} className={`inline-jump ${d.bikes <= 2 ? 'act' : ''}`} onClick={() => onFocusCoord?.([d.lon, d.lat])}>
-                {i ? ' · ' : ''}{l === 'en' ? DOCK_EN[d.id] ?? d.en : d.zh.replace('中央大學', '')} {d.bikes}/{d.capacity}
-              </button>))}</b>
+              <Fragment key={d.id}>
+                {i > 0 && ' · '}
+                <button className={`inline-jump ${d.bikes <= 2 ? 'act' : ''}`} onClick={() => onFocusCoord?.([d.lon, d.lat])}>
+                  {l === 'en' ? DOCK_EN[d.id] ?? d.en : d.zh.replace('中央大學', '')} {d.bikes}/{d.capacity}
+                </button>
+              </Fragment>))}</b>
             <small><M m={live.docks.meta} l={l} /></small>
           </li>
         )}
