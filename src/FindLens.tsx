@@ -10,10 +10,10 @@ const CAT: Record<string, [string, string]> = {
   safety: ['Safety', '安全'], academic: ['Academic', '學術單位'], admin: ['Offices', '行政單位'],
   research: ['Research', '研究中心'], housing: ['Housing', '住宿'], facility: ['Facilities', '設施'],
 };
+// Category synonyms only (typing 'dorm' or '宿舍' opens Housing). Item words (圖書館, 系, 中心) must match an entry's own name.
 const WORDS: Record<string, string> = {
-  safety: 'safety security emergency 安全 校安 警衛 緊急', academic: 'academic college department institute 學術 學院 系 所',
-  admin: 'office admin 行政 處 室', research: 'research centre center 研究 中心', housing: 'housing dorm dormitory residence 住宿 宿舍 舍',
-  facility: 'facility library gym parking seats 設施 圖書館 停車 場館',
+  safety: 'safety security emergency 安全 緊急', academic: 'academic 學術單位', admin: 'office offices admin 行政單位',
+  research: 'research 研究中心', housing: 'housing dorm dorms dormitory residence 住宿 宿舍', facility: 'facility facilities 設施',
 };
 const ORDER = ['safety', 'academic', 'admin', 'research', 'housing', 'facility'];
 const UNIT: Record<string, [string, string]> = { seats: ['seats', '席'], beds: ['beds', '床'], spaces: ['spaces', '格'] };
@@ -25,7 +25,8 @@ export function FindLens({ dir, onFocusBuilding, l }: { dir: Directory | null; o
   const hits = useMemo(() => {
     const s = q.trim().toLowerCase();
     return cats.filter(c => !cat || c.key === cat).map(c => ({ ...c, entries: c.entries.filter(e =>
-      !s || `${e.zh ?? ''} ${e.en ?? ''} ${e.building ?? ''} ${WORDS[c.key] ?? ''}`.toLowerCase().includes(s)) })).filter(c => c.entries.length);
+      !s || `${e.zh ?? ''} ${e.en ?? ''} ${e.building ?? ''}`.toLowerCase().includes(s)
+      || (WORDS[c.key] ?? '').split(' ').some(w => w === s || (s.length >= 3 && w.startsWith(s)))) })).filter(c => c.entries.length);
   }, [cats, q, cat]);
   if (!dir) return <p className="note">{l === 'en' ? 'Loading directory…' : '讀取名錄中…'}</p>;
   const total = cats.reduce((s, c) => s + c.entries.length, 0);

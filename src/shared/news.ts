@@ -74,11 +74,12 @@ export function classifyScope(title: string, defaultScope: NewsScope): NewsScope
 }
 
 export function classifyTopic(title: string): NewsTopic {
-  if (/微電網|太陽能|光電|儲能|停電|台電|電網|淨零|碳中和|綠能|節能|氫能|microgrid|solar|energy|carbon|power/i.test(title)) return 'energy';
-  if (/公車|9025|高鐵|捷運|國道|交流道|交通|停車|YouBike|鐵路|火車|塞車|轉運|bus|transit|traffic|rail|metro/i.test(title)) return 'mobility';
-  if (/豪雨|大雨|颱風|空品|PM2\.?5|高溫|地震|水情|降雨|淹水|氣象|生態|環境|weather|rain|quake|air|climate|flood/i.test(title)) return 'environment';
-  if (/衛星|太空|遙測|AI|人工智慧|實驗室|研究|量子|晶片|半導體|產學|鹿林|USR|satellite|space|research|lab|quantum|ai\b/i.test(title)) return 'research';
-  if (/宿舍|招生|校長|總務|校慶|開學|學生|運動會|獎學金|圖書館|教授|campus|student|dorm|university/i.test(title)) return 'campus';
+  // English terms need word boundaries: bare 'ai' matched 'Taiwan', 'rain' matched 'training'.
+  if (/微電網|太陽能|光電|儲能|停電|台電|電網|淨零|碳中和|綠能|節能|氫能/.test(title) || /\b(microgrid|solar|energy|carbon|power grid|outage)\b/i.test(title)) return 'energy';
+  if (/公車|9025|高鐵|捷運|國道|交流道|交通|停車|YouBike|鐵路|火車|塞車|轉運/.test(title) || /\b(bus|buses|transit|traffic|railway|metro|MRT)\b/i.test(title)) return 'mobility';
+  if (/豪雨|大雨|颱風|空品|PM2\.?5|高溫|地震|水情|降雨|淹水|氣象|生態|環境/.test(title) || /\b(weather|rainfall|typhoon|earthquake|air quality|climate|flood)\b/i.test(title)) return 'environment';
+  if (/衛星|太空|遙測|人工智慧|實驗室|研究|量子|晶片|半導體|產學|鹿林|USR/.test(title) || /\bAI\b/.test(title) || /\b(satellite|space|research|laboratory|quantum|semiconductor)\b/i.test(title)) return 'research';
+  if (/宿舍|招生|校長|總務|校慶|開學|學生|運動會|獎學金|圖書館|教授/.test(title) || /\b(campus|students?|dorm|university)\b/i.test(title)) return 'campus';
   return 'civic';
 }
 

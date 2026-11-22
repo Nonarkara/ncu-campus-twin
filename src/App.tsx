@@ -335,7 +335,7 @@ function TodayLens({
 
       {campus && (
         <>
-          <h2 className="h">{l === 'en' ? 'Key campus nodes (click to inspect)' : '關鍵校園節點（點選檢視）'}</h2>
+          <h2 className="h">{l === 'en' ? 'Key campus nodes' : '關鍵校園節點'}</h2>
           <div className="anchors">
             {anchorKeys.map(id => {
               const a = CAMPUS_ANCHORS[id];
@@ -533,7 +533,7 @@ function PowerLens({
           <div><dt>{l === 'en' ? '2025 GHI / CO₂' : '2025 日照／排碳'}</dt><dd>{a.ghi_kwh_m2_yr} kWh/m² · 0.474 kg CO₂e/kWh (MOEA 2024)</dd></div>
           <div><dt>{l === 'en' ? 'Campus load' : '校園用電'}</dt><dd>{l === 'en' ? 'Not public — slider is scenario input only, needs 總務處 AMI' : '未公開，拉桿僅為情境輸入，需總務處電表'}</dd></div>
         </dl>
-        <p className="note">{a.note} <MetaLine m={{ source: solar.meta.source, tier: solar.meta.tier, asOf: solar.meta.fetchedAt }} l={l} /></p>
+        <p className="note">{a.note} <MetaLine m={{ source: solar.meta.source, tier: solar.meta.tier, asOf: '2025' }} l={l} /></p>
       </details>
     </>
   );
@@ -843,6 +843,7 @@ export function App() {
               className="search"
               value={query}
               onChange={e => setQuery(e.target.value)}
+              onKeyDown={e => { if (e.key === 'Escape') setQuery(''); }}
               placeholder={l === 'en' ? 'Find building…' : '搜尋建物…'}
               aria-label={l === 'en' ? 'Find campus building' : '搜尋校內建物'}
             />

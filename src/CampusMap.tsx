@@ -504,7 +504,7 @@ export function CampusMap({
       : (l === 'en' ? 'Click an on-campus stop (white dot) for 300 m walk catchment' : '點選校內白點公車站檢視 300 m 步行圈');
   } else {
     legend = l === 'en'
-      ? 'Click any building for solar, substation & transit dossier · dashed = OSM boundary'
+      ? 'Select any building for its dossier: height, solar, substation, transit · dashed = OSM boundary'
       : '點選任一建物檢視光電、變電站與公車距離 · 虛線 = OSM 校界';
   }
 

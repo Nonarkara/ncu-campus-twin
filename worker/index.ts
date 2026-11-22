@@ -27,7 +27,10 @@ async function forecast(): Promise<Feed<Forecast>> {
     const j = await getJson(`https://api.open-meteo.com/v1/forecast?latitude=${LAT}&longitude=${LON}&timezone=Asia%2FTaipei&forecast_days=2` +
       '&hourly=precipitation,precipitation_probability,temperature_2m,wind_gusts_10m,uv_index,shortwave_radiation&wind_speed_unit=ms');
     const h = j.hourly;
-    return { meta: { source, tier: 'forecast', asOf: new Date().toISOString() },
+    // asOf = the forecast hour the 'now' values come from (Asia/Taipei slot), not the request time
+    const slot = new Date(Date.now() + 8 * 3600e3).toISOString().slice(0, 13) + ':00';
+    const asOf = (h.time as string[]).includes(slot) ? `${slot}:00+08:00` : null;
+    return { meta: { source, tier: 'forecast', asOf },
       data: { time: h.time, precip: h.precipitation, prob: h.precipitation_probability, temp: h.temperature_2m, gust: h.wind_gusts_10m, uv: h.uv_index, ghi: h.shortwave_radiation } };
   } catch { return { data: null, meta: { source, tier: 'unavailable', asOf: null } }; }
 }
@@ -172,9 +175,7 @@ async function live(env: Env): Promise<Response> {
   const all: Live['road']['data'] = JSON.parse((await env.LIVE.get('road', { cacheTtl: 60 })) ?? '[]');
   // Older than 30 min is not "live": drop it rather than show a stale speed as current.
   const data = all.filter(f => Date.now() - Date.parse(f.at) < 30 * 60e3);
-  const lastError = await env.LIVE.get('road_err', { cacheTtl: 60 });
-  const body: Pick<Live, 'road'> & { lastError?: string } = {
-    lastError: lastError ?? undefined,
+  const body: Pick<Live, 'road'> = {
     road: { data, meta: { source: ROAD_SRC, tier: data.length ? 'live' : 'unavailable', asOf: data.map(f => f.at).sort().at(-1) ?? null } },
   };
   return new Response(JSON.stringify(body), { headers: { 'content-type': 'application/json', 'cache-control': 'public, max-age=60' } });

@@ -23,9 +23,12 @@ function relAge(iso: string, l: L) {
   return l === 'en' ? `${Math.round(m / 1440)}d` : `${Math.round(m / 1440)}天`;
 }
 
+/** Older than this is archive: kept in the corpus and exports, never on the running wire. */
+const ARCHIVE_MS = 30 * 86400e3;
+
 export function NewsTicker({ news, l }: { news: NewsPayload | null; l: L }) {
   // The fixed wire is NCU-only: city politics and crime from the Taoyuan feed stay in the corpus panel, not on the console.
-  const items = useMemo(() => (news?.items ?? []).filter(it => it.scope === 'ncu').slice(0, 20), [news]);
+  const items = useMemo(() => (news?.items ?? []).filter(it => it.scope === 'ncu' && Date.now() - Date.parse(it.publishedAt) < ARCHIVE_MS).slice(0, 20), [news]);
   const [idx, setIdx] = useState(0);
   const [paused, setPaused] = useState(() =>
     typeof window !== 'undefined' && window.matchMedia('(prefers-reduced-motion: reduce)').matches,
@@ -126,7 +129,8 @@ export function NewsCorpusPanel({ news, l }: { news: NewsPayload | null; l: L })
           <li key={it.id}>
             <a href={it.url} target="_blank" rel="noopener noreferrer">{it.title}</a>
             <small>
-              <span className={it.scope === 'ncu' ? 'act' : ''}>{it.scope === 'ncu' ? 'NCU' : (l === 'en' ? 'Taoyuan' : '桃園')}</span>
+              {Date.now() - Date.parse(it.publishedAt) >= ARCHIVE_MS && <><span className="arch">{l === 'en' ? 'archive' : '舊聞'}</span>{' · '}</>}
+              <span className={it.scope === 'ncu' ? 'ink' : ''}>{it.scope === 'ncu' ? 'NCU' : (l === 'en' ? 'Taoyuan' : '桃園')}</span>
               {' · '}{TOPIC_LABEL[it.topic][l === 'en' ? 0 : 1]}
               {' · '}{it.source}
               {' · '}{relAge(it.publishedAt, l)}

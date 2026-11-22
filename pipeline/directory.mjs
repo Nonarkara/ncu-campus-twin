@@ -28,6 +28,9 @@ const categories = dir.categories.map(c => ({ key: c.key, entries: c.entries.fil
 // building's name), never a unit housed inside it. Existing OSM name:en wins. Run after cook.mjs and heights.mjs.
 const strip = s => (s ?? '').replace(/\s*\(.*\)$/, '').trim();
 let named = 0;
+// OSM name:en values that name a unit inside the building, not the building: drop them rather than mislabel the footprint.
+const UNIT_NOT_BUILDING = new Set(['鴻經館', '綜教館(語言中心)']);
+for (const f of campus.buildings.features) if (UNIT_NOT_BUILDING.has(f.properties.name)) f.properties.name_en = null;
 for (const c of categories) for (const e of c.entries) {
   if (!e.osm || !e.en || !(c.key === 'housing' || strip(e.zh) === strip(e.building))) continue;
   const f = campus.buildings.features.find(b => b.properties.id === e.osm);

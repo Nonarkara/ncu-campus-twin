@@ -77,3 +77,11 @@ describe('untrusted feed text', () => {
     expect(row).not.toMatch(/(^|,)"[=+\-@]/);
   });
 });
+
+describe('topic rules use word boundaries', () => {
+  it('does not file Taiwan economy news under research or a training story under environment', () => {
+    expect(classifyTopic("Taiwan's consumer confidence weakens")).toBe('civic');
+    expect(classifyTopic('Teacher training programme opens in Zhongli')).toBe('civic');
+    expect(classifyTopic('NCU AI lab wins award')).toBe('research');
+  });
+});
