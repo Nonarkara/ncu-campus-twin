@@ -23,3 +23,6 @@
 - **Heights**: OSM has floors for only 4 campus buildings, Overture has 0, and Google 2.5D does not cover Taiwan. Only those 4 are extruded.
   - Measured heights (`BUILD_H`, with a source code per building) are in the NLSC 三維建物模型. A small area can be requested online by a registered user at https://3dmaps.nlsc.gov.tw. That application needs Dr Non.
 - Not published anywhere: dorm bed counts, current car/scooter capacity, restaurant count.
+- **Freeway feed status (2026-11-22 13:15):** the */5 cron runs, but every pull from Cloudflare returns 522: Cloudflare's network cannot reach tisvcloud.freeway.gov.tw. Requests from a Taiwanese ISP work fine. `/api/live` hides readings older than 30 min and exposes `lastError`. Two ways to make it live:
+  - (a) a TDX key (official API), or
+  - (b) a 5-min relay on Dr Non's always-on Mac that runs `wrangler kv key put road`.

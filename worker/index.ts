@@ -91,7 +91,9 @@ async function pullRoad(env: Env) {
 
 /** Last good detector reading. Its own collection time travels with it, so the page shows its real age. */
 async function live(env: Env): Promise<Response> {
-  const data: Live['road']['data'] = JSON.parse((await env.LIVE.get('road', { cacheTtl: 60 })) ?? '[]');
+  const all: Live['road']['data'] = JSON.parse((await env.LIVE.get('road', { cacheTtl: 60 })) ?? '[]');
+  // Older than 30 min is not "live": drop it rather than show a stale speed as current.
+  const data = all.filter(f => Date.now() - Date.parse(f.at) < 30 * 60e3);
   const lastError = await env.LIVE.get('road_err', { cacheTtl: 60 });
   const body: Pick<Live, 'road'> & { lastError?: string } = {
     lastError: lastError ?? undefined,
