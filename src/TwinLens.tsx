@@ -42,13 +42,33 @@ export interface Eco {
   bio: { records: number; species: number; byClass: Record<string, number>; datasets: Record<string, number>; years: [number, number]; pinned: number; pinRule: string;
     top: { sci: string; vn: string | null; n: number }[] };
 }
-export interface Ndvi { meta: Meta & { scenes: { date: string }[]; caveat: string; method: string }; green_share_now: number; green_share_prev: number; cells_compared: number; area_m2_compared: number }
+export interface Ndvi {
+  meta: Meta & { scenes: { date: string }[]; caveat: string; method: string };
+  green_share_now: number;
+  green_share_prev: number;
+  cells_compared: number;
+  area_m2_compared: number;
+  grid?: { features: { properties: { v: number; p: number; d: number } }[] };
+}
 
-export function TwinLens({ eco, ndvi, live, campus, dir, layers, onToggle, l }: {
+export function TwinLens({ eco, ndvi, live, campus, dir, layers, onToggle, onFocusCoord, l }: {
   eco: Eco | null; ndvi: Ndvi | null; live: Live | null; campus: CampusData | null; dir: Directory | null;
-  layers: Set<Layer>; onToggle: (k: Layer) => void; l: L;
+  layers: Set<Layer>; onToggle: (k: Layer) => void; onFocusCoord?: (coord: [number, number]) => void; l: L;
 }) {
   const delta = ndvi ? Math.round((ndvi.green_share_now - ndvi.green_share_prev) * 10) / 10 : null;
+  const ndviShift = (() => {
+    const feats = ndvi?.grid?.features;
+    if (!feats?.length) return null;
+    let gained = 0, lost = 0, steady = 0;
+    for (const f of feats) {
+      const d = f.properties.d;
+      if (d >= 0.05) gained++;
+      else if (d <= -0.05) lost++;
+      else steady++;
+    }
+    const tot = feats.length;
+    return { gained, lost, steady, tot, pctGained: Math.round((gained / tot) * 100), pctLost: Math.round((lost / tot) * 100) };
+  })();
   const blds = campus?.buildings.features ?? [];
   const tall = blds.filter(b => b.properties.height_m !== null).length;
   const ecoMeta = eco ? { source: 'OpenStreetMap', tier: 'observed', asOf: eco.meta.fetchedAt ?? null } : null;
@@ -84,21 +104,40 @@ export function TwinLens({ eco, ndvi, live, campus, dir, layers, onToggle, l }: 
         ))}
       </div>
 
+      {ndvi && ndviShift && (
+        <div className="ndvi-bar" aria-label={l === 'en' ? 'NDVI year-on-year cell change' : 'NDVI 年變化分布'}>
+          <div className="ndvi-track">
+            <span className="ndvi-g" style={{ width: `${(ndviShift.gained / ndviShift.tot) * 100}%` }} />
+            <span className="ndvi-s" style={{ width: `${(ndviShift.steady / ndviShift.tot) * 100}%` }} />
+            <span className="ndvi-l" style={{ width: `${(ndviShift.lost / ndviShift.tot) * 100}%` }} />
+          </div>
+          <div className="meta">
+            {l === 'en'
+              ? `${ndviShift.gained} cells greener (≥+0.05) · ${ndviShift.steady} steady · ${ndviShift.lost} drier (≤−0.05) across ${n0(ndvi.cells_compared)} × 20 m cells`
+              : `${ndviShift.gained} 格變綠（≥+0.05）・${ndviShift.steady} 格持平・${ndviShift.lost} 格轉弱（≤−0.05），共 ${n0(ndvi.cells_compared)} 格 20 m 網格`}
+          </div>
+        </div>
+      )}
+
       <ul className="steady">
         {main.length > 0 && live && (
           <li>
             <span>{l === 'en' ? 'Freeway 1 at Zhongli exit' : '國道 1 號・中壢交流道'}</span>
             <b>{main.map(f => (
-              <span key={f.id} className={f.speed !== null && f.speed < SLOW_KMH ? 'act' : ''}>
+              <button key={f.id} className={`inline-jump ${f.speed !== null && f.speed < SLOW_KMH ? 'act' : ''}`}
+                onClick={() => onFocusCoord?.([f.lon, f.lat])}>
                 {f.dir === 'S' ? (l === 'en' ? 'S ' : '南 ') : (l === 'en' ? ' N ' : ' 北 ')}{f.speed ?? '—'}
-              </span>))} km/h</b>
+              </button>))} km/h</b>
             <small><M m={live.road.meta} l={l} /></small>
           </li>
         )}
         {exits.length > 0 && live && (
           <li>
             <span>{l === 'en' ? 'Zhongli exit ramps' : '中壢出口匝道'}</span>
-            <b>{exits.map(f => n0(f.vph)).join(' + ')} {l === 'en' ? 'veh/h' : '輛/時'}</b>
+            <b>{exits.map((f, i) => (
+              <button key={f.id} className="inline-jump" onClick={() => onFocusCoord?.([f.lon, f.lat])}>
+                {i ? ' + ' : ''}{n0(f.vph)}
+              </button>))} {l === 'en' ? 'veh/h' : '輛/時'}</b>
             <small><M m={live.road.meta} l={l} /> · {l === 'en' ? '1-min count ×60; serves all of Zhongli' : '1 分鐘車數 ×60；服務整個中壢'}</small>
           </li>
         )}
@@ -106,7 +145,9 @@ export function TwinLens({ eco, ndvi, live, campus, dir, layers, onToggle, l }: 
           <li>
             <span>{l === 'en' ? 'YouBike bikes / docks' : 'YouBike 車輛／車柱'}</span>
             <b>{live.docks.data.map((d, i) => (
-              <span key={d.id} className={d.bikes <= 2 ? 'act' : ''}>{i ? ' · ' : ''}{l === 'en' ? DOCK_EN[d.id] ?? d.en : d.zh.replace('中央大學', '')} {d.bikes}/{d.capacity}</span>))}</b>
+              <button key={d.id} className={`inline-jump ${d.bikes <= 2 ? 'act' : ''}`} onClick={() => onFocusCoord?.([d.lon, d.lat])}>
+                {i ? ' · ' : ''}{l === 'en' ? DOCK_EN[d.id] ?? d.en : d.zh.replace('中央大學', '')} {d.bikes}/{d.capacity}
+              </button>))}</b>
             <small><M m={live.docks.meta} l={l} /></small>
           </li>
         )}

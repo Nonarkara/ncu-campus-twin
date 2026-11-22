@@ -23,7 +23,7 @@ import timetable from '../data/timetable.json';
 import { CampusMap, type Lens } from './CampusMap';
 import { TwinLens, type Eco, type Ndvi, type Layer } from './TwinLens';
 import { FindLens, type Directory } from './FindLens';
-import { parseYouBike, type Live } from './shared/live';
+import { DOCK_EN, SLOW_KMH, parseYouBike, type Live } from './shared/live';
 import { HeadwayStrip, HourlyStrip, IslandChart, type MetricKey } from './Charts';
 
 type L = 'en' | 'zh';
@@ -76,6 +76,7 @@ function BuildingInspector({
   building,
   campus,
   today,
+  dir,
   inPortfolio,
   onTogglePortfolio,
   onClose,
@@ -84,6 +85,7 @@ function BuildingInspector({
   building: BuildingFeature;
   campus: CampusData;
   today: Today | null;
+  dir: Directory | null;
   inPortfolio: boolean;
   onTogglePortfolio: (id: string) => void;
   onClose: () => void;
@@ -100,6 +102,10 @@ function BuildingInspector({
   const todayKwh = today && p.kwp > 0 ? todayPvKwh(p.kwp, today.hourly) : null;
   const lowKwp = +(p.kwp * 0.5).toFixed(1);
   const co2 = p.kwh_yr > 0 ? annualCo2Tonnes(p.kwh_yr) : 0;
+  const units = useMemo(
+    () => (dir ? dir.categories.flatMap(c => c.entries).filter(e => e.osm === p.id) : []),
+    [dir, p.id],
+  );
 
   return (
     <aside className="inspector" aria-label={l === 'en' ? 'Building dossier' : '建物資訊'}>
@@ -147,6 +153,21 @@ function BuildingInspector({
             <dd>{nearStop.name} · {nearStop.distanceM} m (~{nearStop.walkMin} {l === 'en' ? 'min walk' : '分步行'})</dd>
           </div>
         )}
+        {units.length > 0 && (
+          <div>
+            <dt>{l === 'en' ? `Official units (${units.length})` : `校內單位（${units.length}）`}</dt>
+            <dd className="insp-units">
+              {units.slice(0, 4).map((u, i) => (
+                <div key={i}>
+                  <a href={u.url} target="_blank" rel="noopener noreferrer">{l === 'en' ? (u.en ?? u.zh) : (u.zh ?? u.en)}</a>
+                  {u.capacity && !u.capacity.stale && <> · {u.capacity.value.toLocaleString('en-US')} {u.capacity.unit}</>}
+                  {u.tels?.[0] && <> · <a href={u.tels[0].href}>{u.tels[0].label}</a></>}
+                </div>
+              ))}
+              {units.length > 4 && <small>+{units.length - 4} {l === 'en' ? 'more in Find' : '項詳見「查詢」'}</small>}
+            </dd>
+          </div>
+        )}
       </dl>
       <div className="insp-foot">
         <span className="meta">OSM {p.id} · {p.kind}</span>
@@ -169,12 +190,14 @@ function TodayLens({
   t,
   err,
   campus,
+  live,
   onSelectBuilding,
   l,
 }: {
   t: Today | null;
   err: boolean;
   campus: CampusData | null;
+  live: Live | null;
   onSelectBuilding: (id: string) => void;
   l: L;
 }) {
@@ -182,20 +205,56 @@ function TodayLens({
   if (err && !t) return <p className="note">{tr('err', l)}</p>;
   if (!t) return <p className="note">{tr('loading', l)}</p>;
 
-  const act = t.items.filter(i => i.level === 'act').length;
+  // Live operational alerts from Freeway 1 & YouBike (only when live feeds report an actual threshold breach)
+  const liveItems = [...t.items];
+  const mainRoad = live?.road.data.filter(f => f.kind === 'main') ?? [];
+  const slowRoad = mainRoad.filter(f => f.speed !== null && f.speed < SLOW_KMH);
+  if (slowRoad.length > 0 && live) {
+    liveItems.push({
+      id: 'road-slow',
+      level: 'watch',
+      owner: '總務處 General Affairs',
+      by: null,
+      rule: `House rule: N1 Zhongli IC < ${SLOW_KMH} km/h`,
+      meta: live.road.meta,
+      title: ['Freeway 1 slow at Zhongli exit', '國道 1 號中壢交流道壅塞'],
+      detail: [
+        slowRoad.map(f => `${f.dir === 'S' ? 'S' : 'N'} ${f.speed} km/h`).join(' · ') + ' — expect 9025A delays',
+        slowRoad.map(f => `${f.dir === 'S' ? '南向' : '北向'} ${f.speed} km/h`).join('・') + '，9025A 往臺北恐延誤',
+      ],
+    });
+  }
+  const emptyDocks = live?.docks.data.filter(d => d.bikes === 0 || d.free === 0) ?? [];
+  if (emptyDocks.length > 0 && live) {
+    liveItems.push({
+      id: 'youbike-balance',
+      level: 'watch',
+      owner: 'YouBike / 總務處',
+      by: null,
+      rule: 'House rule: 0 bikes or 0 empty docks on campus',
+      meta: live.docks.meta,
+      title: ['YouBike dock needs rebalancing', '校內 YouBike 場站需調度'],
+      detail: [
+        emptyDocks.map(d => `${DOCK_EN[d.id] ?? d.en} ${d.bikes}/${d.capacity}`).join(' · '),
+        emptyDocks.map(d => `${d.zh.replace('中央大學', '')} ${d.bikes}/${d.capacity}`).join('・'),
+      ],
+    });
+  }
+
+  const act = liveItems.filter(i => i.level === 'act').length;
   const pv250Today = todayPvKwh(MICROGRID_LOI.plannedPvKwp, t.hourly);
   const anchorKeys = ['way/268824891', 'way/268841454', 'way/202690841', 'way/217833430', 'way/202805788', 'way/270806669'];
 
   return (
     <>
       <div className="hero">
-        <b className={act ? 'act' : ''}>{t.items.length}</b>
-        <p>{t.items.length ? tr('needs', l) : tr('none', l)}</p>
+        <b className={act ? 'act' : ''}>{liveItems.length}</b>
+        <p>{liveItems.length ? tr('needs', l) : tr('none', l)}</p>
       </div>
 
-      {t.items.length > 0 && (
+      {liveItems.length > 0 && (
         <ul className="items">
-          {t.items.map(i => (
+          {liveItems.map(i => (
             <li key={i.id} className={`item ${i.level}`}>
               <h3>{pick(i.title, l)}</h3>
               <p>{pick(i.detail, l)}</p>
@@ -243,6 +302,20 @@ function TodayLens({
             <small><MetaLine m={s.meta} l={l} /></small>
           </li>
         ))}
+        {mainRoad.length > 0 && live && (
+          <li>
+            <span>{l === 'en' ? 'Freeway 1 · Zhongli IC' : '國道 1 號・中壢交流道'}</span>
+            <b>{mainRoad.map(f => `${f.dir === 'S' ? (l === 'en' ? 'S ' : '南 ') : (l === 'en' ? 'N ' : '北 ')}${f.speed ?? '—'}`).join(' · ')} km/h</b>
+            <small><MetaLine m={live.road.meta} l={l} /></small>
+          </li>
+        )}
+        {live && live.docks.data.length > 0 && (
+          <li>
+            <span>{l === 'en' ? 'YouBike on campus' : '校內 YouBike'}</span>
+            <b>{live.docks.data.reduce((s, d) => s + d.bikes, 0)} / {live.docks.data.reduce((s, d) => s + d.capacity, 0)} {l === 'en' ? 'bikes' : '輛可借'}</b>
+            <small><MetaLine m={live.docks.meta} l={l} /></small>
+          </li>
+        )}
       </ul>
 
       {campus && (
@@ -452,10 +525,14 @@ function PowerLens({
 function MoveLens({
   selectedStopName,
   onSelectStop,
+  live,
+  onFocusCoord,
   l,
 }: {
   selectedStopName: string | null;
   onSelectStop: (name: string) => void;
+  live: Live | null;
+  onFocusCoord: (coord: [number, number]) => void;
   l: L;
 }) {
   const { hm, weekend } = taipei(new Date());
@@ -463,6 +540,7 @@ function MoveLens({
   const taipeiUp: Row[] = upcoming(tt.toTaipei.rows, 2, hm, weekend);
   const nextTaipei = taipeiUp[0];
   const nextTaipeiMin = nextTaipei ? minutesUntil(hm, nextTaipei[2]) : null;
+  const mainRoad = live?.road.data.filter(f => f.kind === 'main') ?? [];
 
   const block = (k: 'toTaipei' | 'toHSR' | 'toCampus', col: 1 | 2, label: [string, string]) => {
     const rows: Row[] = upcoming(tt[k].rows, col, hm, weekend).slice(0, 5);
@@ -546,6 +624,33 @@ function MoveLens({
         {block('toTaipei', 2, ['9025A → Taipei, at NCU stop', '9025A 往臺北，中大站約'])}
         {block('toHSR', 1, ['172 / 173 → HSR Taoyuan', '172 / 173 往高鐵桃園站'])}
         {block('toCampus', 2, ['132 / 133 Zhongli → NCU', '132 / 133 中壢 → 中大'])}
+        {mainRoad.length > 0 && live && (
+          <li>
+            <span>{l === 'en' ? 'Freeway 1 (9025A corridor)' : '國道 1 號（9025A 路廊）'}</span>
+            <b>
+              {mainRoad.map(f => (
+                <button key={f.id} className={`inline-jump ${f.speed !== null && f.speed < SLOW_KMH ? 'act' : ''}`}
+                  onClick={() => onFocusCoord([f.lon, f.lat])}>
+                  {f.dir === 'S' ? (l === 'en' ? 'S ' : '南 ') : (l === 'en' ? ' N ' : ' 北 ')}{f.speed ?? '—'}
+                </button>
+              ))} km/h
+            </b>
+            <small><MetaLine m={live.road.meta} l={l} /></small>
+          </li>
+        )}
+        {live && live.docks.data.length > 0 && (
+          <li>
+            <span>{l === 'en' ? 'YouBike docks' : 'YouBike 場站'}</span>
+            <b>
+              {live.docks.data.map((d, i) => (
+                <button key={d.id} className={`inline-jump ${d.bikes <= 2 ? 'act' : ''}`} onClick={() => onFocusCoord([d.lon, d.lat])}>
+                  {i ? ' · ' : ''}{l === 'en' ? DOCK_EN[d.id] ?? d.en : d.zh.replace('中央大學', '')} {d.bikes}/{d.capacity}
+                </button>
+              ))}
+            </b>
+            <small><MetaLine m={live.docks.meta} l={l} /></small>
+          </li>
+        )}
       </ul>
 
       <p className="note">
@@ -579,12 +684,8 @@ export function App() {
   const [layers, setLayers] = useState<Set<Layer>>(() => new Set<Layer>(['b3d', 'green', 'water', 'flow']));
   const toggleLayer = (k: Layer) => setLayers(prev => { const n = new Set(prev); n.has(k) ? n.delete(k) : n.add(k); return n; });
 
-  // Twin data loads on first visit to Twin; live feeds refresh every 2 min while Twin is open
+  // Load live Freeway 1 + YouBike feeds on mount (powers Today, Twin, and Move) and refresh every 5 min while visible.
   useEffect(() => {
-    if (lens !== 'twin') return;
-    if (!eco) fetch('/data/eco.json').then(r => r.json() as Promise<Eco>).then(setEco).catch(() => {});
-    if (!ndvi) fetch('/data/ndvi.json').then(r => r.json()).then(setNdvi).catch(() => {});
-    // Road from our edge (2-min cache); YouBike straight from its CORS-open feed (~0.9 MB gz), so only while visible, every 5 min.
     const load = async () => {
       if (document.hidden) return;
       const [road, yb] = await Promise.allSettled([
@@ -601,10 +702,14 @@ export function App() {
     const id = setInterval(load, 300000);
     document.addEventListener('visibilitychange', load);
     return () => { clearInterval(id); document.removeEventListener('visibilitychange', load); };
-  }, [lens]);
+  }, []);
+
+  // Heavy Twin layers (eco + Sentinel-2 NDVI grid) load on first visit to Twin
   useEffect(() => {
-    if ((lens === 'find' || lens === 'twin') && !dir) fetch('/data/directory.json').then(r => r.json() as Promise<Directory>).then(setDir).catch(() => {});
-  }, [lens, dir]);
+    if (lens !== 'twin') return;
+    if (!eco) fetch('/data/eco.json').then(r => r.json() as Promise<Eco>).then(setEco).catch(() => {});
+    if (!ndvi) fetch('/data/ndvi.json').then(r => r.json()).then(setNdvi).catch(() => {});
+  }, [lens, eco, ndvi]);
   const twin = useMemo(() => ({ eco, ndvi, live, layers }), [eco, ndvi, live, layers]);
 
   useEffect(() => {
@@ -625,6 +730,7 @@ export function App() {
     const id = setInterval(loadToday, 300000);
     fetch('/data/campus.json').then(r => r.json() as Promise<CampusData>).then(setCampus).catch(() => {});
     fetch('/data/solar.json').then(r => r.json()).then(setSolar).catch(() => {});
+    fetch('/data/directory.json').then(r => r.json() as Promise<Directory>).then(setDir).catch(() => {});
     return () => clearInterval(id);
   }, []);
 
@@ -728,6 +834,7 @@ export function App() {
             building={selectedBuilding}
             campus={campus}
             today={today}
+            dir={dir}
             inPortfolio={portfolioIds.has(selectedBuilding.properties.id)}
             onTogglePortfolio={togglePortfolio}
             onClose={() => setSelectedBuildingId(null)}
@@ -736,10 +843,20 @@ export function App() {
         )}
 
         {lens === 'today' && (
-          <TodayLens t={today} err={todayErr} campus={campus} onSelectBuilding={focusBuilding} l={l} />
+          <TodayLens t={today} err={todayErr} campus={campus} live={live} onSelectBuilding={focusBuilding} l={l} />
         )}
         {lens === 'twin' && (
-          <TwinLens eco={eco} ndvi={ndvi as Ndvi | null} live={live} campus={campus} dir={dir} layers={layers} onToggle={k => { toggleLayer(k); if (!shownForLayers.current) { shownForLayers.current = true; showMap(); } }} l={l} />
+          <TwinLens
+            eco={eco}
+            ndvi={ndvi as Ndvi | null}
+            live={live}
+            campus={campus}
+            dir={dir}
+            layers={layers}
+            onToggle={k => { toggleLayer(k); if (!shownForLayers.current) { shownForLayers.current = true; showMap(); } }}
+            onFocusCoord={coord => { setFocusCoord(prev => ({ coord, seq: (prev?.seq ?? 0) + 1 })); showMap(); }}
+            l={l}
+          />
         )}
         {lens === 'find' && <FindLens dir={dir} onFocusBuilding={id => { focusBuilding(id); showMap(); }} l={l} />}
         {lens === 'power' && (
@@ -754,7 +871,13 @@ export function App() {
           />
         )}
         {lens === 'move' && (
-          <MoveLens selectedStopName={selectedStopName} onSelectStop={focusStop} l={l} />
+          <MoveLens
+            selectedStopName={selectedStopName}
+            onSelectStop={focusStop}
+            live={live}
+            onFocusCoord={coord => { setFocusCoord(prev => ({ coord, seq: (prev?.seq ?? 0) + 1 })); showMap(); }}
+            l={l}
+          />
         )}
 
         <p className="note">
