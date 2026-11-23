@@ -124,7 +124,7 @@ export function IslandChart({ sim, l }: { sim: IslandSimulation; l: 'en' | 'zh' 
 
       {/* 4h LOI target vertical rule */}
       <line x1={x4h} y1={padT} x2={x4h} y2={padT + plotH} stroke="#f59e0b" strokeWidth="1" strokeDasharray="3 2" />
-      <text x={x4h + 3} y={padT + 8} className="ax accent">4h LOI</text>
+      <text x={x4h + 3} y={padT + 8} className="ax accent">{l === 'en' ? '4h LOI' : '4時目標'}</text>
 
       {/* PV contribution bars (bottom-aligned, subtle) */}
       {steps.map((s, i) => {

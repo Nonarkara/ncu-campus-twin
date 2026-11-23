@@ -124,6 +124,8 @@ function BuildingInspector({
   const todayKwh = today && p.kwp > 0 ? todayPvKwh(p.kwp, today.hourly) : null;
   const lowKwp = +(p.kwp * 0.5).toFixed(1);
   const co2 = p.kwh_yr > 0 ? annualCo2Tonnes(p.kwh_yr) : 0;
+  const UNIT_ZH: Record<string, string> = { seats: '席', beds: '床', spaces: '格' };
+  const fmtUnit = (u: string) => (l === 'en' ? u : UNIT_ZH[u] ?? u);
   const units = useMemo(
     () => (dir ? dir.categories.flatMap(c => c.entries).filter(e => e.osm === p.id && e.url !== CAMPUS_MAP_SOURCE.sourceUrl) : []),
     [dir, p.id],
@@ -153,7 +155,7 @@ function BuildingInspector({
                       ? (l === 'en' ? 'NLSC LiDAR' : '國土測繪光達')
                         + (p.height_mdate ? ` · ${p.height_mdate.slice(0, 4)}-${p.height_mdate.slice(4)}` : '')
                         + ((p.nlsc_n ?? 0) > 0
-                          ? (l === 'en' ? ` · ${p.nlsc_n} roof sections` : `・${p.nlsc_n} 個屋頂分區`)
+                          ? (l === 'en' ? ` · ${p.nlsc_n} roof ${p.nlsc_n === 1 ? 'section' : 'sections'}` : `・${p.nlsc_n} 個屋頂分區`)
                             + ((p.nlsc_n ?? 0) > 1 ? ` · ${p.nlsc_min}–${p.height_m} m` : '')
                           : '')
                       : (l === 'en' ? 'OSM floors × 3.5 m (modeled)' : 'OSM 樓層 × 3.5 m（模式）')}
@@ -201,7 +203,7 @@ function BuildingInspector({
               {units.slice(0, 4).map((u, i) => (
                 <div key={i}>
                   <a href={u.url} target="_blank" rel="noopener noreferrer">{l === 'en' ? (u.en ?? u.zh) : (u.zh ?? u.en)}</a>
-                  {u.capacity && !u.capacity.stale && <> · {u.capacity.value.toLocaleString('en-US')} {u.capacity.unit}</>}
+                  {u.capacity && !u.capacity.stale && <> · {u.capacity.value.toLocaleString('en-US')} {fmtUnit(u.capacity.unit)}</>}
                   {u.tels?.[0] && <> · <a href={u.tels[0].href}>{u.tels[0].label}</a></>}
                 </div>
               ))}
@@ -292,7 +294,11 @@ function TodayLens({
     <>
       <div className="hero">
         <b className={act ? 'act' : ''}>{liveItems.length}</b>
-        <p>{liveItems.length ? tr('needs', l) : tr('none', l)}</p>
+        <p>
+          {liveItems.length
+            ? (l === 'en' ? (liveItems.length === 1 ? 'needs a decision today' : 'need a decision today') : tr('needs', l))
+            : tr('none', l)}
+        </p>
       </div>
 
       {liveItems.length > 0 && (
@@ -505,8 +511,8 @@ function PowerLens({
       <div className="strip-head">
         <h2 className="h">
           {l === 'en'
-            ? `Siting portfolio (${selectedB.length} roofs · ${Math.round(selectedKwp)} kWp)`
-            : `選址組合（${selectedB.length} 棟・${Math.round(selectedKwp)} kWp）`}
+            ? <>Siting portfolio ({selectedB.length} roofs · {Math.round(selectedKwp)} <span className="unit-case">kWp</span>)</>
+            : <>選址組合（{selectedB.length} 棟・{Math.round(selectedKwp)} <span className="unit-case">kWp</span>）</>}
         </h2>
         <div className="seg">
           <button onClick={() => { onSetPortfolio(LAB_PRESET_IDS); setUseSelected(true); }}>
@@ -521,8 +527,8 @@ function PowerLens({
       {selectedB.length > 0 ? (
         <p className="meta">
           {l === 'en'
-            ? `${pctOfPlan}% of 250 kWp Phase 1 · ${Math.round(selectedKwhYr / 1000).toLocaleString()} MWh/yr · ${co2Selected.toLocaleString()} t CO₂e/yr avoided (MOEA 0.474 kg/kWh)`
-            : `達第一期 250 kWp 之 ${pctOfPlan}% · 年發電 ${Math.round(selectedKwhYr / 1000).toLocaleString()} MWh · 減碳 ${co2Selected.toLocaleString()} 公噸 CO₂e/年`}
+            ? <>{pctOfPlan}% of 250 kWp Phase 1 · {Math.round(selectedKwhYr / 1000).toLocaleString()} MWh/yr · {co2Selected.toLocaleString()} t <span className="nb">CO₂e/yr</span> avoided (MOEA 0.474 kg/kWh)</>
+            : <>達第一期 250 kWp 之 {pctOfPlan}% · 年發電 {Math.round(selectedKwhYr / 1000).toLocaleString()} MWh · 減碳 {co2Selected.toLocaleString()} 公噸 <span className="nb">CO₂e/年</span></>}
         </p>
       ) : (
         <p className="meta">
@@ -621,6 +627,8 @@ function MoveLens({
     { label: '132/133', times: todayTimes(routes.toCampus) },
   ];
 
+  const inboundUp = upcoming(routes.toCampus.rows, routes.toCampus.col, hm, day);
+  const hasLocalBus = inboundUp.length > 0;
   const needTransfer = verified && (!nextTaipei || (nextTaipeiMin !== null && nextTaipeiMin > 90));
 
   return (
@@ -640,11 +648,19 @@ function MoveLens({
 
       {needTransfer && (
         <div className="advice">
-          <strong>{l === 'en' ? 'NCU transfer advice' : '中大轉乘建議'}</strong>
+          <strong>
+            {hasLocalBus
+              ? (l === 'en' ? 'NCU transfer advice' : '中大轉乘建議')
+              : (l === 'en' ? 'After scheduled bus hours' : '今日公車班次已結束')}
+          </strong>
           <p>
-            {l === 'en'
-              ? 'Take 132 / 133 to Youmin Hospital (佑民醫院) and transfer to main-line 9025.'
-              : '請搭 132 / 133 至佑民醫院轉乘主線 9025 往臺北。'}
+            {hasLocalBus
+              ? (l === 'en'
+                ? 'Take 132 / 133 to Youmin Hospital (佑民醫院) and transfer to main-line 9025.'
+                : '請搭 132 / 133 至佑民醫院轉乘主線 9025 往臺北。')
+              : (l === 'en'
+                ? 'Scheduled 9025A, 172/173, and 132/133 trips have ended for today. Use YouBike, taxi, or walk to Zhongda Rd.'
+                : '今日 9025A、172/173 與 132/133 班表班次皆已結束，建議改騎 YouBike、搭計程車或步行至中大路。')}
           </p>
         </div>
       )}

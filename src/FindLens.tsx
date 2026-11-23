@@ -39,7 +39,9 @@ export function FindLens({ dir, onFocusBuilding, l }: { dir: Directory | null; o
         <b>{total}</b>
         <p>{l === 'en' ? `units, offices and places, each linked to its official page · ${withCap} with a published capacity`
           : `個單位、處室與場所，皆連結官方頁面・${withCap} 項有公開容量`}<br />
-          <small className="meta">{dir.meta.source} · {dir.meta.asOf}</small></p>
+          <small className="meta">
+            {l === 'en' ? dir.meta.source : '中大官方網頁（逐筆附原始連結）'} · <span className="nb">{dir.meta.asOf}</span>
+          </small></p>
       </div>
       <input type="search" className="search find" value={q} onChange={e => setQ(e.target.value)}
         placeholder={l === 'en' ? 'Department, office, dorm…' : '系所、處室、宿舍…'} aria-label={l === 'en' ? 'Search directory' : '搜尋名錄'} />
@@ -65,9 +67,9 @@ export function FindLens({ dir, onFocusBuilding, l }: { dir: Directory | null; o
                     {e.capacity && <a className="cap" href={e.capacity.source} target="_blank" rel="noopener noreferrer">
                       {e.capacity.value.toLocaleString('en-US')} {UNIT[e.capacity.unit]?.[l === 'en' ? 0 : 1] ?? e.capacity.unit}
                       {e.capacity.stale && (l === 'en' ? ` (${e.capacity.stale}, stale)` : `（${e.capacity.stale} 年，過時）`)}</a>}
-                    {e.tels?.length === 1 && <a href={e.tels[0].href}>{e.phone}</a>}
-                    {(e.tels?.length ?? 0) > 1 && e.tels.map(t => <a key={t.href} href={t.href}>{t.label}</a>)}
-                    {!e.tels?.length && e.phone && <span>{e.phone}</span>}
+                    {e.tels?.length === 1 && <a href={e.tels[0].href}>{l === 'en' ? (e.phone ?? '').replace(/分機\s*/g, 'ext. ') : e.phone}</a>}
+                    {(e.tels?.length ?? 0) > 1 && e.tels.map(t => <a key={t.href} href={t.href}>{l === 'en' ? t.label.replace(/分機\s*/g, 'ext. ') : t.label}</a>)}
+                    {!e.tels?.length && e.phone && <span>{l === 'en' ? e.phone.replace(/分機\s*/g, 'ext. ') : e.phone}</span>}
                     {e.osm && <button onClick={() => onFocusBuilding(e.osm!)}>{l === 'en' ? 'Map' : '地圖'} ›</button>}
                   </span>
                 </li>

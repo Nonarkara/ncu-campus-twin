@@ -65,7 +65,7 @@ export function NewsTicker({ news, l }: { news: NewsPayload | null; l: L }) {
       <span className="tk-meta">{cur.source} · {relAge(cur.publishedAt, l)}</span>
       <div className="tk-ctl">
         <button onClick={() => setIdx(i => (i - 1 + items.length) % items.length)} aria-label={l === 'en' ? 'Previous headline' : '上一則'}>‹</button>
-        <button onClick={() => setPaused(p => !p)} aria-pressed={paused} aria-label={paused ? 'Play wire' : 'Pause wire'}>
+        <button onClick={() => setPaused(p => !p)} aria-pressed={paused} aria-label={paused ? (l === 'en' ? 'Play wire' : '繼續播放新聞') : (l === 'en' ? 'Pause wire' : '暫停新聞')}>
           {paused ? '▶' : '❚❚'}
         </button>
         <button onClick={() => setIdx(i => (i + 1) % items.length)} aria-label={l === 'en' ? 'Next headline' : '下一則'}>›</button>
@@ -112,7 +112,7 @@ export function NewsCorpusPanel({ news, l }: { news: NewsPayload | null; l: L })
           {l === 'en' ? 'All' : '全部'}
         </button>
         <button aria-pressed={scope === 'ncu'} onClick={() => setScope(scope === 'ncu' ? 'all' : 'ncu')}>
-          NCU <small>{news.stats.ncuCount}</small>
+          {l === 'en' ? 'NCU' : '中大'} <small>{news.stats.ncuCount}</small>
         </button>
         <button aria-pressed={scope === 'taoyuan'} onClick={() => setScope(scope === 'taoyuan' ? 'all' : 'taoyuan')}>
           {l === 'en' ? 'Taoyuan' : '桃園'} <small>{news.stats.taoyuanCount}</small>

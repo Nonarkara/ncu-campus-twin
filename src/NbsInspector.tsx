@@ -158,7 +158,7 @@ export function NbsGallery({
             title={pick(it.title, l)}
           >
             <img src={it.src} alt={pick(it.title, l)} loading="lazy" />
-            {it.coord && <i className="nbs-pin" aria-label="Pinned on map" />}
+            {it.coord && <i className="nbs-pin" aria-label={l === 'en' ? 'Pinned on map' : '已標點於地圖'} />}
             <span>{pick(it.title, l)}</span>
           </button>
         ))}

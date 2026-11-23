@@ -4,3 +4,4 @@ dist
 var/
 .DS_Store
 .dev.vars
+*.tsbuildinfo

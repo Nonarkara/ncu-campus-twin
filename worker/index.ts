@@ -93,6 +93,7 @@ export default {
   async fetch(req: Request, env: Env, ctx: ExecutionContext) {
     const url = new URL(req.url);
     if (url.protocol === 'http:' && url.hostname !== 'localhost' && !env.DEV) { url.protocol = 'https:'; return Response.redirect(url.toString(), 301); }
+    if (url.pathname === '/api/health') return secure(await health(env));
     if (url.pathname === '/api/live') return secure(await live(env));
     if (url.pathname === '/api/news') return secure(await news(env, url, ctx));
     if (url.pathname !== '/api/today') return secure(await env.ASSETS.fetch(req));
@@ -171,6 +172,39 @@ async function pullRoad(env: Env) {
   if (!r.ok) throw new Error(String(r.status));
   const data = parseVDLive(await r.text());
   if (data.length) await env.LIVE.put('road', JSON.stringify(data));
+}
+
+/** Operational loop health check: reports live freshness & counts for KV-backed loops without leaking secrets. */
+async function health(env: Env): Promise<Response> {
+  const nowMs = Date.now();
+  const [roadRaw, roadErr, newsRaw] = await Promise.all([
+    env.LIVE.get('road', { cacheTtl: 30 }),
+    env.LIVE.get('road_err', { cacheTtl: 30 }),
+    env.LIVE.get('news_db', { cacheTtl: 30 }),
+  ]);
+  const roadAll: Live['road']['data'] = JSON.parse(roadRaw ?? '[]');
+  const roadAsOf = roadAll.map(f => f.at).sort().at(-1) ?? null;
+  const roadAgeMin = roadAsOf ? Math.round((nowMs - Date.parse(roadAsOf)) / 60000) : null;
+  const roadFresh = roadAgeMin !== null && roadAgeMin < 30;
+
+  const newsStore: NewsStore | null = newsRaw ? (JSON.parse(newsRaw) as NewsStore) : null;
+  const newsAsOf = newsStore?.updatedAt ?? null;
+  const newsAgeMin = newsAsOf ? Math.round((nowMs - Date.parse(newsAsOf)) / 60000) : null;
+  const newsFresh = newsAgeMin !== null && newsAgeMin < 60 && (newsStore?.items?.length ?? 0) > 0;
+
+  const status = roadFresh && newsFresh ? 'ok' : 'degraded';
+  return new Response(
+    JSON.stringify({
+      status,
+      checkedAt: new Date(nowMs).toISOString(),
+      loops: {
+        road: { tier: roadFresh ? 'live' : 'stale', asOf: roadAsOf, ageMin: roadAgeMin, detectors: roadAll.length },
+        news: { tier: newsFresh ? 'live' : 'stale', asOf: newsAsOf, ageMin: newsAgeMin, articles: newsStore?.items?.length ?? 0 },
+      },
+      edgeCronNote: roadErr ? 'Edge cron cannot reach tisvcloud (expected 522); Mac relay owns KV updates.' : null,
+    }),
+    { headers: { 'content-type': 'application/json; charset=utf-8', 'cache-control': 'no-store' } },
+  );
 }
 
 /** Last good detector reading. Its own collection time travels with it, so the page shows its real age. */

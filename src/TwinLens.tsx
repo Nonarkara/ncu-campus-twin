@@ -107,7 +107,10 @@ export function TwinLens({ eco, ndvi, live, campus, dir, nbs, selectedNbsId, onS
           <p>
             {l === 'en' ? 'of campus is vegetated, ' : '校園植被覆蓋率，'}
             <span className={delta !== null && delta <= -2 ? 'act' : ''}>
-              {delta !== null && (delta > 0 ? '+' : '')}{delta} {l === 'en' ? `pts vs ${ndvi.meta.scenes[1].date}` : `個百分點（對比 ${ndvi.meta.scenes[1].date}）`}
+              {delta !== null && (delta > 0 ? '+' : '')}{delta}{' '}
+              {l === 'en'
+                ? <>pts vs <span className="nb">{ndvi.meta.scenes[1].date}</span></>
+                : <>個百分點（對比 <span className="nb">{ndvi.meta.scenes[1].date}</span>）</>}
             </span>
             <br /><small className="meta">{ndvi.meta.source} · {l === 'en' ? 'observed' : '觀測'} · {ndvi.meta.asOf}</small>
           </p>
@@ -233,7 +236,13 @@ export function TwinLens({ eco, ndvi, live, campus, dir, nbs, selectedNbsId, onS
           </ul>
         </details>
       )}
-      {ndvi && <p className="note">{ndvi.meta.method}. {ndvi.meta.caveat}</p>}
+      {ndvi && (
+        <p className="note">
+          {l === 'en'
+            ? `${ndvi.meta.method}. ${ndvi.meta.caveat}`
+            : '以 20 m 解析度 Sentinel-2 L2A 影像計算 NDVI=(B08−B04)/(B08+B04)，僅保留無雲格點（SCL 4–7），NDVI ≥ 0.4 計為植被。兩期影像分別為 2025-11-15 與 2026-11-17，皆為晴朗無雲且僅差 2 日，除草、耕作或工程仍可能顯示變化。'}
+        </p>
+      )}
     </>
   );
 }

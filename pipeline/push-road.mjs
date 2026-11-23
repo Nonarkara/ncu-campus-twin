@@ -36,12 +36,30 @@ function parseVDLive(xml) {
   });
 }
 
-const r = await fetch(URL, { signal: AbortSignal.timeout(25000), headers: { 'user-agent': 'ncu-campus-twin/0.3-relay' } });
-if (!r.ok) throw new Error(`VDLive HTTP ${r.status}`);
-const xml = await r.text();
-const data = parseVDLive(xml);
-if (!data.length) throw new Error('Parsed 0 Zhongli VD detectors');
+async function fetchWithRetry(url, attempts = 2) {
+  let lastErr;
+  for (let i = 0; i < attempts; i++) {
+    try {
+      const r = await fetch(url, { signal: AbortSignal.timeout(25000), headers: { 'user-agent': 'ncu-campus-twin/0.3-relay' } });
+      if (!r.ok) throw new Error(`VDLive HTTP ${r.status}`);
+      return await r.text();
+    } catch (e) {
+      lastErr = e;
+      if (i + 1 < attempts) await new Promise(res => setTimeout(res, 5000));
+    }
+  }
+  throw lastErr;
+}
 
-const wrangler = join(ROOT, 'node_modules/.bin/wrangler');
-execFileSync(wrangler, ['kv', 'key', 'put', 'road', JSON.stringify(data), '--namespace-id', KV_ID, '--remote'], { cwd: ROOT, stdio: 'pipe' });
-console.log(new Date().toISOString(), 'pushed', data.length, 'detectors:', data.map(d => `${d.dir}:${d.kind}=${d.speed ?? '—'}km/h/${d.vph}vph`).join(', '));
+try {
+  const xml = await fetchWithRetry(URL);
+  const data = parseVDLive(xml);
+  if (!data.length) throw new Error('Parsed 0 Zhongli VD detectors');
+
+  const wrangler = join(ROOT, 'node_modules/.bin/wrangler');
+  execFileSync(wrangler, ['kv', 'key', 'put', 'road', JSON.stringify(data), '--namespace-id', KV_ID, '--remote'], { cwd: ROOT, stdio: 'pipe' });
+  console.log(new Date().toISOString(), 'pushed', data.length, 'detectors:', data.map(d => `${d.dir}:${d.kind}=${d.speed ?? '—'}km/h/${d.vph}vph`).join(', '));
+} catch (e) {
+  console.error(new Date().toISOString(), 'road-relay error:', e?.cause?.code || e?.message || String(e));
+  process.exit(1);
+}

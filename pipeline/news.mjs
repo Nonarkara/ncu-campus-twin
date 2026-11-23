@@ -30,15 +30,41 @@ try {
   }
 } catch { /* first run */ }
 
+async function fetchFeed(url, attempts = 2) {
+  let lastErr;
+  for (let i = 0; i < attempts; i++) {
+    try {
+      const r = await fetch(url, { signal: AbortSignal.timeout(15000), headers: { 'user-agent': 'ncu-campus-twin/0.6-cli' } });
+      if (!r.ok) throw new Error(`HTTP ${r.status}`);
+      return await r.text();
+    } catch (e) {
+      lastErr = e;
+      if (i + 1 < attempts) await new Promise(res => setTimeout(res, 5000));
+    }
+  }
+  throw lastErr;
+}
+
 const nowIso = new Date().toISOString();
 let added = 0;
+let feedsOk = 0;
 for (const f of FEEDS) {
-  const r = await fetch(f.url, { signal: AbortSignal.timeout(15000), headers: { 'user-agent': 'ncu-campus-twin/0.6-cli' } });
-  if (!r.ok) continue;
-  const xml = await r.text();
+  let xml;
+  try {
+    xml = await fetchFeed(f.url);
+    feedsOk++;
+  } catch (e) {
+    console.error(nowIso, `news-relay feed error (${f.scope}/${f.lang}):`, e?.cause?.code || e?.message || String(e));
+    continue;
+  }
   for (const it of parseGoogleNewsRss(xml, f.scope, f.lang, nowIso, 30)) {
     if (!existing.has(it.id)) { existing.set(it.id, it); added++; }
   }
+}
+
+if (feedsOk === 0) {
+  console.error(nowIso, 'news-relay: all 3 RSS feeds unreachable; keeping existing KV timestamp.');
+  process.exit(1);
 }
 
 const rows = [...existing.values()].sort((a, b) => b.publishedAt.localeCompare(a.publishedAt));
