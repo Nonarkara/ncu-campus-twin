@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
+import type { Appearance } from './shared/appearance';
 import workerUrl from 'maplibre-gl/dist/maplibre-gl-worker.mjs?worker&url';
 import {
   setWorkerUrl,
@@ -32,12 +33,21 @@ export interface TwinData {
   layers: Set<TwinLayer>;
 }
 const BOUNDS: [number, number, number, number] = [121.1849, 24.9651, 121.1968, 24.9717]; // OSM relation/18727079 bbox
-const INK = 'rgba(230,237,243,';
-const AMBER = '#f59e0b';
+// Global style state changes paint expressions without rebuilding the canvas or its sources.
+const tone = (dark: string, light: string): ExpressionSpecification =>
+  ['case', ['boolean', ['global-state', 'light'], false], light, dark];
+const GROUND = tone('#0a0e14', '#f7f5ef');
+const INK = tone('#e6edf3', '#202b33');
+const DIM = tone('#9aa7b4', '#505d66');
+const AMBER = tone('#f59e0b', '#884b00');
+const ink = (opacity: number) => tone(`rgba(230,237,243,${opacity})`, `rgba(32,43,51,${opacity})`);
+const amber = (opacity: number) => tone(`rgba(245,158,11,${opacity})`, `rgba(136,75,0,${opacity})`);
+const HEIGHT_RAMP = [4, tone('#394552', '#d7e0e4'), 18, tone('#6e7e8f', '#98acb8'), 42, tone('#c8d2dc', '#45667c')] as const;
 const EMPTY_FC = { type: 'FeatureCollection' as const, features: [] };
 
 const style: StyleSpecification = {
   version: 8,
+  state: { light: { default: false } },
   glyphs: 'https://tiles.openfreemap.org/fonts/{fontstack}/{range}.pbf',
   sources: {
     photo: {
@@ -49,7 +59,7 @@ const style: StyleSpecification = {
     },
   },
   layers: [
-    { id: 'bg', type: 'background', paint: { 'background-color': '#0a0e14' } },
+    { id: 'bg', type: 'background', paint: { 'background-color': GROUND } },
     {
       id: 'photo',
       type: 'raster',
@@ -61,6 +71,7 @@ const style: StyleSpecification = {
 };
 
 interface CampusMapProps {
+  appearance: Appearance;
   lens: Lens;
   l: 'en' | 'zh';
   campus: CampusData | null;
@@ -74,6 +85,7 @@ interface CampusMapProps {
 }
 
 export function CampusMap({
+  appearance,
   lens,
   l,
   campus,
@@ -87,6 +99,7 @@ export function CampusMap({
 }: CampusMapProps) {
   const el = useRef<HTMLDivElement>(null);
   const map = useRef<MLMap | null>(null);
+  const initialAppearance = useRef(appearance);
   const [ready, setReady] = useState(false);
   const [photo, setPhoto] = useState(false);
   const [showLabels, setShowLabels] = useState(true);
@@ -103,6 +116,7 @@ export function CampusMap({
     const m = new MLMapCtor({
       container: el.current!,
       style,
+      globalState: { light: initialAppearance.current === 'light' },
       bounds: BOUNDS,
       fitBoundsOptions: { padding: 28 },
       minZoom: 13.5,
@@ -140,30 +154,30 @@ export function CampusMap({
       m.addSource('catchment', { type: 'geojson', data: EMPTY_FC });
 
       // Wider Zhongli / Freeway 1 urban fabric (surrounding buildings, waterways, arterial hierarchy)
-      m.addLayer({ id: 'sur-waters', type: 'line', source: 'sur-waters', paint: { 'line-color': INK + '0.16)', 'line-width': ['match', ['get', 'k'], 'river', 2.5, 'canal', 1.5, 1] } });
-      m.addLayer({ id: 'sur-bld', type: 'fill', source: 'sur-bld', paint: { 'fill-color': INK + '0.055)' } });
-      m.addLayer({ id: 'sur-bld-line', type: 'line', source: 'sur-bld', paint: { 'line-color': INK + '0.12)', 'line-width': 0.5 } });
+      m.addLayer({ id: 'sur-waters', type: 'line', source: 'sur-waters', paint: { 'line-color': ink(0.16), 'line-width': ['match', ['get', 'k'], 'river', 2.5, 'canal', 1.5, 1] } });
+      m.addLayer({ id: 'sur-bld', type: 'fill', source: 'sur-bld', paint: { 'fill-color': ink(0.055) } });
+      m.addLayer({ id: 'sur-bld-line', type: 'line', source: 'sur-bld', paint: { 'line-color': ink(0.12), 'line-width': 0.5 } });
       m.addLayer({ id: 'sur-roads-casing', type: 'line', source: 'sur-roads', filter: ['==', ['get', 'k'], 'motorway'],
-        paint: { 'line-color': '#0a0e14', 'line-width': 5.5 } });
+        paint: { 'line-color': GROUND, 'line-width': 5.5 } });
       m.addLayer({
         id: 'sur-roads',
         type: 'line',
         source: 'sur-roads',
         paint: {
-          'line-color': ['match', ['get', 'k'], 'motorway', INK + '0.52)', ['motorway_link', 'trunk', 'primary'], INK + '0.38)', 'secondary', INK + '0.30)', INK + '0.24)'],
+          'line-color': ['match', ['get', 'k'], 'motorway', ink(0.52), ['motorway_link', 'trunk', 'primary'], ink(0.38), 'secondary', ink(0.30), ink(0.24)],
           'line-width': ['match', ['get', 'k'], 'motorway', 3.2, ['trunk', 'primary'], 2.4, 'motorway_link', 2.0, 'secondary', 1.8, 1.2],
         },
       });
 
-      m.addLayer({ id: 'water', type: 'fill', source: 'ctx', filter: ['==', ['get', 'k'], 'water'], paint: { 'fill-color': INK + '0.08)' } });
-      m.addLayer({ id: 'pitch', type: 'line', source: 'ctx', filter: ['in', ['get', 'k'], ['literal', ['pitch', 'track', 'park']]], paint: { 'line-color': INK + '0.13)', 'line-width': 1 } });
+      m.addLayer({ id: 'water', type: 'fill', source: 'ctx', filter: ['==', ['get', 'k'], 'water'], paint: { 'fill-color': ink(0.08) } });
+      m.addLayer({ id: 'pitch', type: 'line', source: 'ctx', filter: ['in', ['get', 'k'], ['literal', ['pitch', 'track', 'park']]], paint: { 'line-color': ink(0.13), 'line-width': 1 } });
       m.addLayer({
         id: 'roads',
         type: 'line',
         source: 'ctx',
         filter: ['==', ['geometry-type'], 'LineString'],
         paint: {
-          'line-color': INK + '0.22)',
+          'line-color': ink(0.22),
           'line-width': ['match', ['get', 'k'], ['secondary', 'tertiary'], 2, ['footway', 'path', 'steps', 'cycleway'], 0.5, 1],
         },
       });
@@ -171,7 +185,7 @@ export function CampusMap({
         id: 'campus',
         type: 'line',
         source: 'campus',
-        paint: { 'line-color': INK + '0.55)', 'line-width': 1, 'line-dasharray': [3, 2] },
+        paint: { 'line-color': ink(0.55), 'line-width': 1, 'line-dasharray': [3, 2] },
       });
 
       // 300 m bus stop catchment (Move lens)
@@ -179,7 +193,7 @@ export function CampusMap({
         id: 'catchment-fill',
         type: 'fill',
         source: 'catchment',
-        paint: { 'fill-color': 'rgba(245,158,11,0.08)' },
+        paint: { 'fill-color': amber(0.08) },
       });
       m.addLayer({
         id: 'catchment-line',
@@ -191,21 +205,21 @@ export function CampusMap({
       // Twin lens: Sentinel-2 NDVI grid, water network, wildlife pins, live docks, detectors, and NbS field dots
       for (const id of ['ndvi', 'water', 'bio', 'docks', 'vd', 'nbs']) m.addSource(id, { type: 'geojson', data: EMPTY_FC });
       m.addLayer({ id: 'ndvi', type: 'fill', source: 'ndvi', layout: { visibility: 'none' }, paint: {
-        'fill-color': ['case', ['<=', ['get', 'd'], -0.15], 'rgba(245,158,11,0.6)',
-          ['interpolate', ['linear'], ['get', 'v'], 0.1, INK + '0)', 0.4, INK + '0.10)', 0.8, INK + '0.32)']] } });
+        'fill-color': ['case', ['<=', ['get', 'd'], -0.15], amber(0.6),
+          ['interpolate', ['linear'], ['get', 'v'], 0.1, ink(0), 0.4, ink(0.10), 0.8, ink(0.32)]] } });
       m.addLayer({ id: 'water-area', type: 'fill', source: 'water', filter: ['==', ['geometry-type'], 'Polygon'], layout: { visibility: 'none' },
-        paint: { 'fill-color': INK + '0.22)', 'fill-outline-color': INK + '0.7)' } });
+        paint: { 'fill-color': ink(0.22), 'fill-outline-color': ink(0.7) } });
       m.addLayer({ id: 'water-line', type: 'line', source: 'water', filter: ['==', ['geometry-type'], 'LineString'], layout: { visibility: 'none' },
-        paint: { 'line-color': INK + '0.75)', 'line-width': ['match', ['get', 'k'], 'river', 3, 'canal', 2, 'stream', 1.5, 1],
+        paint: { 'line-color': ink(0.75), 'line-width': ['match', ['get', 'k'], 'river', 3, 'canal', 2, 'stream', 1.5, 1],
           'line-dasharray': ['match', ['get', 'k'], ['drain', 'ditch'], ['literal', [2, 1.5]], ['literal', [1, 0]]] } });
 
-      m.addLayer({ id: 'bld', type: 'fill', source: 'bld', paint: { 'fill-color': INK + '0.14)' } });
+      m.addLayer({ id: 'bld', type: 'fill', source: 'bld', paint: { 'fill-color': ink(0.14) } });
       m.addLayer({
         id: 'bld-line',
         type: 'line',
         source: 'bld',
         paint: {
-          'line-color': INK + '0.38)',
+          'line-color': ink(0.38),
           'line-width': ['case', ['boolean', ['feature-state', 'hover'], false], 2, 0.75],
         },
       });
@@ -213,19 +227,19 @@ export function CampusMap({
       // 3D: NLSC measured heights (BUILD_H) + stated OSM floors extruded; unmeasured buildings stay flat
       m.addLayer({ id: 'bld-3d', type: 'fill-extrusion', source: 'bld', filter: ['!=', ['get', 'height_m'], null], layout: { visibility: 'none' },
         paint: {
-          'fill-extrusion-color': ['interpolate', ['linear'], ['get', 'height_m'], 4, '#394552', 18, '#6e7e8f', 42, '#c8d2dc'],
+          'fill-extrusion-color': ['interpolate', ['linear'], ['get', 'height_m'], ...HEIGHT_RAMP],
           'fill-extrusion-height': ['get', 'height_m'],
           'fill-extrusion-opacity': 0.92,
         } });
       m.addLayer({ id: 'bio', type: 'circle', source: 'bio', layout: { visibility: 'none' },
-        paint: { 'circle-radius': 3.5, 'circle-color': '#0a0e14', 'circle-stroke-color': INK + '0.9)', 'circle-stroke-width': 1.5 } });
+        paint: { 'circle-radius': 3.5, 'circle-color': GROUND, 'circle-stroke-color': ink(0.9), 'circle-stroke-width': 1.5 } });
       m.addLayer({ id: 'docks', type: 'circle', source: 'docks', layout: { visibility: 'none' },
-        paint: { 'circle-radius': ['interpolate', ['linear'], ['get', 'capacity'], 30, 6, 70, 10], 'circle-color': '#0a0e14',
-          'circle-stroke-color': ['case', ['<=', ['get', 'bikes'], 2], AMBER, '#e6edf3'], 'circle-stroke-width': 2 } });
+        paint: { 'circle-radius': ['interpolate', ['linear'], ['get', 'capacity'], 30, 6, 70, 10], 'circle-color': GROUND,
+          'circle-stroke-color': ['case', ['<=', ['get', 'bikes'], 2], AMBER, INK], 'circle-stroke-width': 2 } });
       m.addLayer({ id: 'vd', type: 'circle', source: 'vd', layout: { visibility: 'none' },
-        paint: { 'circle-radius': 6, 'circle-color': ['case', ['<', ['coalesce', ['get', 'speed'], 999], 40], AMBER, '#e6edf3'], 'circle-stroke-color': '#0a0e14', 'circle-stroke-width': 2 } });
+        paint: { 'circle-radius': 6, 'circle-color': ['case', ['<', ['coalesce', ['get', 'speed'], 999], 40], AMBER, INK], 'circle-stroke-color': GROUND, 'circle-stroke-width': 2 } });
       m.addLayer({ id: 'nbs', type: 'circle', source: 'nbs', layout: { visibility: 'none' },
-        paint: { 'circle-radius': 7, 'circle-color': AMBER, 'circle-stroke-color': '#e6edf3', 'circle-stroke-width': 2 } });
+        paint: { 'circle-radius': 7, 'circle-color': AMBER, 'circle-stroke-color': INK, 'circle-stroke-width': 2 } });
 
       // Straight-line radial screening links from HV substation to selected roofs (Power lens)
       m.addLayer({
@@ -242,7 +256,7 @@ export function CampusMap({
         source: 'substation',
         paint: {
           'circle-radius': 8,
-          'circle-color': '#0a0e14',
+          'circle-color': GROUND,
           'circle-stroke-color': AMBER,
           'circle-stroke-width': 2,
         },
@@ -261,8 +275,8 @@ export function CampusMap({
         source: 'stops',
         paint: {
           'circle-radius': 3,
-          'circle-color': '#0a0e14',
-          'circle-stroke-color': INK + '0.6)',
+          'circle-color': GROUND,
+          'circle-stroke-color': ink(0.6),
           'circle-stroke-width': 1,
         },
       });
@@ -283,8 +297,8 @@ export function CampusMap({
           'text-max-angle': 30,
         },
         paint: {
-          'text-color': '#9aa7b4',
-          'text-halo-color': '#0a0e14',
+          'text-color': DIM,
+          'text-halo-color': GROUND,
           'text-halo-width': 1.5,
         },
       });
@@ -301,8 +315,8 @@ export function CampusMap({
           'text-optional': true,
         },
         paint: {
-          'text-color': 'rgba(230,237,243,0.86)',
-          'text-halo-color': '#0a0e14',
+          'text-color': ink(0.86),
+          'text-halo-color': GROUND,
           'text-halo-width': 1.5,
         },
       });
@@ -378,6 +392,10 @@ export function CampusMap({
 
   // Load campus GeoJSON into MapLibre sources once fetched
   useEffect(() => {
+    if (ready) map.current?.setGlobalStateProperty('light', appearance === 'light');
+  }, [appearance, ready]);
+
+  useEffect(() => {
     const m = map.current;
     if (!m || !ready || !campus) return;
     (m.getSource('ctx') as GeoJSONSource | undefined)?.setData(campus.context);
@@ -405,16 +423,16 @@ export function CampusMap({
     if (lens === 'power') {
       m.setPaintProperty('bld', 'fill-color', [
         'case',
-        inPortfolio, 'rgba(245,158,11,0.85)',
-        isSelected, 'rgba(230,237,243,0.34)',
-        ['interpolate', ['linear'], ['get', 'kwp'], 0, INK + '0.06)', 100, 'rgba(245,158,11,0.22)', 650, 'rgba(245,158,11,0.58)'],
+        inPortfolio, amber(0.85),
+        isSelected, ink(0.34),
+        ['interpolate', ['linear'], ['get', 'kwp'], 0, ink(0.06), 100, amber(0.22), 650, amber(0.58)],
       ]);
     } else {
       m.setPaintProperty('bld', 'fill-color', [
         'case',
-        isSelected, 'rgba(230,237,243,0.42)', // selection is ink; amber stays 'act' (NDVI loss shares this view)
-        isAnchor, INK + '0.24)',
-        INK + '0.13)',
+        isSelected, ink(0.42), // selection is ink; amber stays 'act' (NDVI loss shares this view)
+        isAnchor, ink(0.24),
+        ink(0.13),
       ]);
     }
 
@@ -422,10 +440,10 @@ export function CampusMap({
     const isPowerPortfolio: ExpressionSpecification = lens === 'power' ? inPortfolio : ['==', ['get', 'id'], '__none__'];
     m.setPaintProperty('bld-line', 'line-color', [
       'case',
-      isSelected, '#e6edf3',
-      isPowerPortfolio, '#e6edf3',
-      isAnchor, INK + '0.7)',
-      INK + '0.35)',
+      isSelected, INK,
+      isPowerPortfolio, INK,
+      isAnchor, ink(0.7),
+      ink(0.35),
     ] as ExpressionSpecification);
     m.setPaintProperty('bld-line', 'line-width', [
       'case',
@@ -439,7 +457,7 @@ export function CampusMap({
     m.setPaintProperty('bld-3d', 'fill-extrusion-color', [
       'case',
       isSelected, AMBER,
-      ['interpolate', ['linear'], ['get', 'height_m'], 4, '#394552', 18, '#6e7e8f', 42, '#c8d2dc'],
+      ['interpolate', ['linear'], ['get', 'height_m'], ...HEIGHT_RAMP],
     ] as ExpressionSpecification);
 
     // Bus stops
@@ -456,12 +474,12 @@ export function CampusMap({
     m.setPaintProperty(
       'stops',
       'circle-color',
-      lens === 'move' ? ['case', isSelectedStop, AMBER, onCampus, '#e6edf3', '#0a0e14'] : '#0a0e14',
+      lens === 'move' ? ['case', isSelectedStop, AMBER, onCampus, INK, GROUND] : GROUND,
     );
     m.setPaintProperty(
       'stops',
       'circle-stroke-color',
-      lens === 'move' ? ['case', isSelectedStop, '#e6edf3', onCampus, '#0a0e14', INK + '0.5)'] : INK + '0.6)',
+      lens === 'move' ? ['case', isSelectedStop, INK, onCampus, GROUND, ink(0.5)] : ink(0.6),
     );
 
     // Substation & straight-line radial screening links (Power lens)
@@ -546,8 +564,8 @@ export function CampusMap({
     if (m.getLayer('nbs')) {
       const selNbs: ExpressionSpecification = twin.selectedNbsId ? ['==', ['get', 'id'], twin.selectedNbsId] : ['==', ['get', 'id'], '__none__'];
       m.setPaintProperty('nbs', 'circle-radius', ['case', selNbs, 9.5, 7]);
-      m.setPaintProperty('nbs', 'circle-color', ['case', selNbs, '#e6edf3', AMBER]);
-      m.setPaintProperty('nbs', 'circle-stroke-color', ['case', selNbs, AMBER, '#e6edf3']);
+      m.setPaintProperty('nbs', 'circle-color', ['case', selNbs, INK, AMBER]);
+      m.setPaintProperty('nbs', 'circle-stroke-color', ['case', selNbs, AMBER, INK]);
     }
     const reduced = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
     if (lens === 'twin' && twin.layers.has('b3d')) {
@@ -613,8 +631,8 @@ export function CampusMap({
     legend = l === 'en' ? 'Tap “Map ›” in the directory to locate a building · dashed = OSM boundary' : '點名錄中的「地圖 ›」定位建物 · 虛線 = OSM 校界';
   } else if (lens === 'twin') {
     legend = l === 'en'
-      ? 'Brighter = greener (Sentinel-2) · amber = NDVI down ≥0.15 YoY · drag to rotate · 3D = NLSC measured BUILD_H'
-      : '越亮越綠（Sentinel-2）・琥珀 = NDVI 較去年降 ≥0.15・拖曳旋轉・3D 採國土測繪實測高度';
+      ? 'Stronger fill = higher NDVI (Sentinel-2) · amber = NDVI down ≥0.15 YoY · drag to rotate · 3D = NLSC measured BUILD_H'
+      : '填色越深，NDVI 越高（Sentinel-2）・琥珀 = NDVI 較去年降 ≥0.15・拖曳旋轉・3D 採國土測繪實測高度';
   } else if (lens === 'move') {
     legend = selectedStopName
       ? (l === 'en' ? `${selectedStopName} · dashed ring = 300 m (~4 min walk)` : `${selectedStopName} · 虛線圓 = 300 公尺（步行約 4 分）`)

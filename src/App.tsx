@@ -1,3 +1,4 @@
+import { initialAppearance, saveAppearance } from './shared/appearance';
 import { Fragment, useEffect, useMemo, useRef, useState } from 'react';
 import type { Today, Meta } from './shared/today';
 import { CHECK_OPERATOR, SERVICE_LABELS, routes, scheduledRows, serviceDay, taipei, upcoming } from './shared/transit';
@@ -28,7 +29,7 @@ import { TwinLens, type Eco, type Ndvi, type Layer } from './TwinLens';
 import { FindLens, type Directory } from './FindLens';
 import { DOCK_EN, SLOW_KMH, parseYouBike, type Live } from './shared/live';
 import type { NewsPayload } from './shared/news';
-import { HeadwayStrip, HourlyStrip, IslandChart, type MetricKey } from './Charts';
+import { HeadwayStrip, HourlyStrip, IslandChart, SolarSeasons, type SolarSeason, type MetricKey } from './Charts';
 import { NewsCorpusPanel, NewsTicker } from './NewsWire';
 import { NbsInspector, type NbsDataset } from './NbsInspector';
 
@@ -41,7 +42,7 @@ const T = {
   power: ['Microgrid', '微電網'],
   move: ['Move', '交通'],
   needs: ['need a decision today', '項需今日決策'],
-  none: ['No active exceptions. Next check in 5 min.', '目前無異常需決策，5 分鐘後再檢。'],
+  none: ['No exceptions in available feeds.', '現有資料未顯示異常。'],
   steady: ['Campus pulse', '校園即時脈動'],
   off: ['internal feeds not connected yet', '項校內系統尚未串接'],
   by: ['by', '於'],
@@ -427,6 +428,15 @@ function PowerLens({
 }) {
   const [loadKw, setLoadKw] = useState(600);
   const [useSelected, setUseSelected] = useState(false);
+  const [season, setSeason] = useState<SolarSeason | null>(null);
+
+  useEffect(() => {
+    const controller = new AbortController();
+    fetch('/data/solar-season.json', { signal: controller.signal })
+      .then(r => { if (!r.ok) throw new Error('Solar history unavailable'); return r.json() as Promise<SolarSeason>; })
+      .then(setSeason).catch(() => {});
+    return () => controller.abort();
+  }, []);
 
   if (!solar) return <p className="note">{tr('loading', l)}</p>;
 
@@ -560,6 +570,28 @@ function PowerLens({
           );
         })}
       </ul>
+
+      {season && <SolarSeasons season={season} installedKwp={activeKwp} pr={a.pr} l={l} />}
+
+      <h2 className="h">{l === 'en' ? 'Campus energy projects' : '校園能源計畫'}</h2>
+      <dl className="rows energy-reference">
+        <div>
+          <dt><a href="https://ncusec.ncu.edu.tw/news/press_content.php?P_ID=45733" target="_blank" rel="noopener noreferrer">{l === 'en' ? 'NCU × Taipower' : '中大 × 台電'}</a></dt>
+          <dd>{l === 'en' ? 'Planned · 1 MW / 3 MWh battery · 250 kWp PV' : '規劃中・1 MW / 3 MWh 儲能・250 kWp 光電'}
+            <small className="meta">2026-03-13</small>
+          </dd>
+        </div>
+        <div>
+          <dt><a href="https://herc.ncu.edu.tw/zh/microgrid/" target="_blank" rel="noopener noreferrer">{l === 'en' ? 'HERC demonstration' : '氫能中心示範'}</a></dt>
+          <dd>{l === 'en' ? 'Approx. 82 kW PV · 20 kW fuel cell · 110 kWh battery' : '約 82 kW 光電・20 kW 燃料電池・110 kWh 儲能'}
+            <small className="meta">{l === 'en' ? 'Source checked 2026-11-24' : '來源查核 2026-11-24'}</small>
+          </dd>
+        </div>
+        <div>
+          <dt><a href="https://ncusec.ncu.edu.tw/news/headlines_content.php?H_ID=3556" target="_blank" rel="noopener noreferrer">{l === 'en' ? 'White Energy House' : '白色能源屋'}</a></dt>
+          <dd>{l === 'en' ? 'Demonstration home · rooftop PV, storage and energy management' : '示範住宅・整合屋頂光電、儲能與能源管理'}</dd>
+        </div>
+      </dl>
 
       <details className="off">
         <summary>{l === 'en' ? 'Model assumptions & sources ›' : '模型假設與資料來源 ›'}</summary>
@@ -738,6 +770,8 @@ function MoveLens({
 export function App() {
   const [l, setL] = useState<L>(() => (navigator.language.startsWith('zh') ? 'zh' : 'en'));
   const [lens, setLens] = useState<Lens>('today');
+  const [appearance, setAppearance] = useState(initialAppearance);
+  const dark = appearance === 'dark';
   const [clock, setClock] = useState(() => taipei(new Date()));
 
   const [today, setToday] = useState<Today | null>(null);
@@ -895,6 +929,21 @@ export function App() {
             <button className="lang" onClick={() => setL(l === 'en' ? 'zh' : 'en')} aria-label="Language">
               {l === 'en' ? <><b>EN</b> / 中</> : <>EN / <b>中</b></>}
             </button>
+            <button
+              className="appearance"
+              aria-label={dark ? (l === 'en' ? 'Switch to light mode' : '切換淺色模式') : (l === 'en' ? 'Switch to dark mode' : '切換深色模式')}
+              title={dark ? (l === 'en' ? 'Light mode' : '淺色模式') : (l === 'en' ? 'Dark mode' : '深色模式')}
+              onClick={() => {
+                const next = dark ? 'light' : 'dark';
+                saveAppearance(next);
+                setAppearance(next);
+              }}
+            >
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" aria-hidden="true">
+                {dark ? <><circle cx="12" cy="12" r="4" /><path d="M12 1v3m0 16v3M1 12h3m16 0h3M4 4l2 2m12 12 2 2M4 20l2-2M18 6l2-2" /></>
+                  : <path d="M21 14a9 9 0 0 1-11-11 9 9 0 1 0 11 11Z" />}
+              </svg>
+            </button>
           </div>
         </header>
 
@@ -1007,6 +1056,7 @@ export function App() {
 
       <div className="map-col">
         <CampusMap
+          appearance={appearance}
           lens={lens}
           l={l}
           campus={campus}

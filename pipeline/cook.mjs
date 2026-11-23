@@ -3,7 +3,7 @@
 import { readFile, writeFile } from 'node:fs/promises';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { SOLAR, roofSolar } from './solar.mjs';
+import { SOLAR, roofSolar, monthlyIrradiation } from './solar.mjs';
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..');
 const raw = async f => JSON.parse(await readFile(join(ROOT, 'var/raw', f), 'utf8'));
@@ -23,7 +23,7 @@ const ring = g => { const c = g.map(p => [+p.lon.toFixed(6), +p.lat.toFixed(6)])
 const osm = await raw('osm-ncu.json');
 const ctx = await raw('osm-context.json');
 const ghi = await raw('openmeteo-ghi-2025.json');
-const ghiYear = ghi.daily.shortwave_radiation_sum.reduce((s, v) => s + (v ?? 0), 0) / 3.6; // kWh/m²/yr
+const ghiYear = monthlyIrradiation(ghi, 2025).reduce((sum, month) => sum + month.kwhM2, 0); // kWh/m²/yr
 
 const campusRel = osm.elements.find(e => e.type === 'relation' && e.id === 18727079);
 const campus = {

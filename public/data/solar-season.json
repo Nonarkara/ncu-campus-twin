@@ -1,0 +1,73 @@
+{
+  "meta": {
+    "source": "Open-Meteo Historical Weather",
+    "sourceUrl": "https://open-meteo.com/en/docs/historical-weather-api",
+    "tier": "modeled",
+    "asOf": "2025",
+    "latitude": 24.99121,
+    "longitude": 121.19483,
+    "timezone": "Asia/Taipei"
+  },
+  "months": [
+    {
+      "month": 1,
+      "days": 31,
+      "kwhM2": 97.4027777777778
+    },
+    {
+      "month": 2,
+      "days": 28,
+      "kwhM2": 85.39444444444443
+    },
+    {
+      "month": 3,
+      "days": 31,
+      "kwhM2": 123.48888888888888
+    },
+    {
+      "month": 4,
+      "days": 30,
+      "kwhM2": 140.18888888888887
+    },
+    {
+      "month": 5,
+      "days": 31,
+      "kwhM2": 157.64999999999995
+    },
+    {
+      "month": 6,
+      "days": 30,
+      "kwhM2": 176.45277777777778
+    },
+    {
+      "month": 7,
+      "days": 31,
+      "kwhM2": 160.7527777777778
+    },
+    {
+      "month": 8,
+      "days": 31,
+      "kwhM2": 194.3138888888889
+    },
+    {
+      "month": 9,
+      "days": 30,
+      "kwhM2": 164.31388888888884
+    },
+    {
+      "month": 10,
+      "days": 31,
+      "kwhM2": 130.0638888888889
+    },
+    {
+      "month": 11,
+      "days": 30,
+      "kwhM2": 96.97222222222223
+    },
+    {
+      "month": 12,
+      "days": 31,
+      "kwhM2": 84.54166666666669
+    }
+  ]
+}

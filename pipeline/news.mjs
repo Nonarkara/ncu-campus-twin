@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 // Local news corpus archiver: pulls NCU & Taoyuan open RSS feeds, deduplicates into
 // var/news/ncu-taoyuan-news.jsonl for offline analysis, and optionally syncs to Cloudflare KV `news_db`.
-import { execFileSync } from 'node:child_process';
+import { putKv } from './put-kv.mjs';
 import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -72,8 +72,7 @@ await writeFile(DB_FILE, rows.map(r => JSON.stringify(r)).join('\n') + '\n');
 
 // Push latest 300 deduplicated articles to Cloudflare KV `LIVE` (`news_db`) so /api/news stays live
 const store = { updatedAt: nowIso, items: rows.slice(0, 300) };
-const wrangler = join(ROOT, 'node_modules/.bin/wrangler');
 const tmpJson = join(DB_DIR, 'news_db.json');
 await writeFile(tmpJson, JSON.stringify(store));
-execFileSync(wrangler, ['kv', 'key', 'put', 'news_db', '--path', tmpJson, '--namespace-id', KV_ID, '--remote'], { cwd: ROOT, stdio: 'pipe' });
+putKv(ROOT, KV_ID, 'news_db', ['--path', tmpJson]);
 console.log(`${nowIso} archived ${rows.length} total articles (+${added} new) -> var/news/ncu-taoyuan-news.jsonl & KV news_db (${store.items.length})`);

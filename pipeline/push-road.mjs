@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 // Relay Freeway Bureau VDLive.xml (Zhongli IC detectors) into Cloudflare KV `LIVE` key `road`.
 // Cloudflare's edge gets HTTP 522 from tisvcloud.freeway.gov.tw; this runs cleanly from a local host every 5 min.
-import { execFileSync } from 'node:child_process';
+import { putKv } from './put-kv.mjs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -56,8 +56,7 @@ try {
   const data = parseVDLive(xml);
   if (!data.length) throw new Error('Parsed 0 Zhongli VD detectors');
 
-  const wrangler = join(ROOT, 'node_modules/.bin/wrangler');
-  execFileSync(wrangler, ['kv', 'key', 'put', 'road', JSON.stringify(data), '--namespace-id', KV_ID, '--remote'], { cwd: ROOT, stdio: 'pipe' });
+  putKv(ROOT, KV_ID, 'road', [JSON.stringify(data)]);
   console.log(new Date().toISOString(), 'pushed', data.length, 'detectors:', data.map(d => `${d.dir}:${d.kind}=${d.speed ?? '—'}km/h/${d.vph}vph`).join(', '));
 } catch (e) {
   console.error(new Date().toISOString(), 'road-relay error:', e?.cause?.code || e?.message || String(e));

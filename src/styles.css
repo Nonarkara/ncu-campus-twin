@@ -1,10 +1,21 @@
 /* Console register. One accent (#f59e0b), radius 0, no shadows, no gradients. Three type sizes: 32 / 14 / 11. Grid: 4 px. */
 :root {
-  --bg: #0a0e14; --ink: #e6edf3; --dim: #9aa7b4; --line: rgba(230, 237, 243, .14); --line-hi: rgba(230, 237, 243, .28);
-  --amber: #f59e0b; --surface: rgba(230, 237, 243, .035);
+  color-scheme: dark;
+  --bg: #0a0e14; --ink: #e6edf3; --dim: #9aa7b4; --amber: #f59e0b;
+  --support: #12354e;
+  --line: color-mix(in srgb, var(--ink) 14%, transparent);
+  --line-hi: color-mix(in srgb, var(--ink) 28%, transparent);
+  --surface: color-mix(in srgb, var(--support) 22%, var(--bg));
+  --chart-bar: color-mix(in srgb, var(--ink) 62%, transparent);
+  --chart-past: color-mix(in srgb, var(--ink) 34%, transparent);
   --t-hero: 32px; --t-body: 14px; --t-micro: 11px;
   --f: 'Jost', 'Noto Sans TC', sans-serif;
   --panel: 400px;
+}
+[data-appearance='light'] {
+  color-scheme: light;
+  --bg: #f7f5ef; --ink: #202b33; --dim: #505d66; --amber: #884b00;
+  --surface: color-mix(in srgb, var(--support) 5%, var(--bg));
 }
 * { box-sizing: border-box; margin: 0; border-radius: 0 !important; box-shadow: none !important; }
 html, body, #root { height: 100%; }
@@ -32,6 +43,8 @@ button { cursor: pointer; }
 .brand span { color: var(--dim); font-weight: 400; }
 .clock { color: var(--dim); font-size: var(--t-micro); }
 .lang { font-size: var(--t-micro); color: var(--dim); padding: 4px 0 4px 8px; min-height: 32px; }
+.appearance { display: inline-grid; place-items: center; vertical-align: middle; min-width: 32px; min-height: 32px; color: var(--ink); }
+.appearance:hover { color: var(--amber); }
 .lang b { color: var(--ink); font-weight: 600; }
 
 .nav-row { display: flex; align-items: flex-end; justify-content: space-between; gap: 8px; border-bottom: 1px solid var(--line); }
@@ -71,8 +84,8 @@ button { cursor: pointer; }
 .inline-jump.act { color: var(--amber); }
 .ndvi-bar { padding: 6px 0 8px; }
 .ndvi-track { display: flex; height: 4px; gap: 1px; background: var(--line); }
-.ndvi-g { background: rgba(230, 237, 243, .85); }
-.ndvi-s { background: rgba(230, 237, 243, .22); }
+.ndvi-g { background: color-mix(in srgb, var(--ink) 85%, transparent); }
+.ndvi-s { background: var(--line-hi); }
 .ndvi-l { background: var(--amber); }
 
 .ticker { display: flex; align-items: center; gap: 8px; padding: 0 10px; min-height: 28px; border-top: 1px solid var(--line); background: var(--bg); font-size: var(--t-micro); overflow: hidden; }
@@ -192,7 +205,7 @@ button { cursor: pointer; }
 .mapctl button[aria-pressed='true'] { color: var(--ink); }
 .mapctl button:hover { color: var(--ink); }
 .legend { position: absolute; left: 12px; top: 12px; max-width: calc(100% - 245px); font-size: var(--t-micro); color: var(--dim); background: var(--bg); padding: 4px 8px; border: 1px solid var(--line); }
-.maplibregl-ctrl-attrib { background: rgba(10, 14, 20, .86) !important; color: var(--dim) !important; font-size: var(--t-micro); }
+.maplibregl-ctrl-attrib { background: var(--bg) !important; color: var(--dim) !important; font-size: var(--t-micro); }
 .maplibregl-ctrl-attrib a { color: var(--dim) !important; }
 .maplibregl-ctrl-attrib-button { filter: invert(0.8); }
 
@@ -222,6 +235,7 @@ details.off ul { list-style: none; padding: 0; }
 .unit-case { text-transform: none; }
 @media (pointer: coarse) {
   .lang, .row-add, .stop-btn, .actbtn { min-height: 44px; }
+  .appearance { min-width: 44px; min-height: 44px; }
   .tk-ctl button { min-width: 36px; min-height: 36px; }
 }
 
@@ -269,3 +283,6 @@ details.cat[open] summary::after { content: '⌄'; }
   .news-more, details summary { min-height: 32px; }
   .slider { height: 32px; }
 }
+
+.solar-caption a, .energy-reference a { color: inherit; }
+.energy-reference small { display: block; font-size: inherit; }
