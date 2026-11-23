@@ -96,6 +96,20 @@ button { cursor: pointer; }
 .news-list small .act { color: var(--amber); }
 .news-more { font-size: var(--t-micro); color: var(--dim); padding: 6px 0; min-height: 28px; }
 .news-more:hover { color: var(--ink); }
+
+.nbs-fig { margin: 8px 0 6px; border: 1px solid var(--line); background: var(--bg); }
+.nbs-fig img { display: block; width: 100%; max-height: 240px; object-fit: cover; }
+.nbs-desc { font-size: var(--t-body); color: var(--ink); line-height: 1.45; margin-bottom: 6px; }
+.nbs-fns { display: flex; flex-wrap: wrap; gap: 4px; margin-bottom: 6px; }
+.nbs-fn { font-size: var(--t-micro); color: var(--dim); border: 1px solid var(--line); padding: 1px 6px; }
+.nbs-box { margin-top: 10px; border-top: 1px solid var(--line); }
+.nbs-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 4px; margin-top: 8px; }
+.nbs-thumb { position: relative; border: 1px solid var(--line); background: var(--bg); text-align: left; padding: 0; overflow: hidden; display: flex; flex-direction: column; }
+.nbs-thumb:hover, .nbs-thumb.on { border-color: var(--amber); }
+.nbs-thumb img { display: block; width: 100%; aspect-ratio: 4 / 3; object-fit: cover; }
+.nbs-thumb span { display: block; font-size: 10px; line-height: 1.25; color: var(--dim); padding: 3px 4px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.nbs-thumb.on span { color: var(--ink); }
+.nbs-pin { position: absolute; top: 4px; right: 4px; width: 7px; height: 7px; background: var(--amber); border: 1px solid var(--bg); }
 .insp-foot { display: flex; justify-content: space-between; align-items: center; gap: 8px; margin-top: 8px; padding-top: 8px; border-top: 1px solid var(--line); }
 .actbtn { border: 1px solid var(--line-hi); padding: 4px 10px; font-size: var(--t-micro); min-height: 28px; color: var(--ink); }
 .actbtn:hover { border-color: var(--amber); }

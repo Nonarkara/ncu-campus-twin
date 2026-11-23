@@ -30,6 +30,7 @@ import { DOCK_EN, SLOW_KMH, parseYouBike, type Live } from './shared/live';
 import type { NewsPayload } from './shared/news';
 import { HeadwayStrip, HourlyStrip, IslandChart, type MetricKey } from './Charts';
 import { NewsCorpusPanel, NewsTicker } from './NewsWire';
+import { NbsInspector, type NbsDataset } from './NbsInspector';
 
 type L = 'en' | 'zh';
 
@@ -735,10 +736,12 @@ export function App() {
   const [query, setQuery] = useState('');
   const [eco, setEco] = useState<Eco | null>(null);
   const [ndvi, setNdvi] = useState<any>(null);
+  const [nbs, setNbs] = useState<NbsDataset | null>(null);
+  const [selectedNbsId, setSelectedNbsId] = useState<string | null>(null);
   const [live, setLive] = useState<Live | null>(null);
   const [news, setNews] = useState<NewsPayload | null>(null);
   const [dir, setDir] = useState<Directory | null>(null);
-  const [layers, setLayers] = useState<Set<Layer>>(() => new Set<Layer>(['b3d', 'green', 'water', 'flow']));
+  const [layers, setLayers] = useState<Set<Layer>>(() => new Set<Layer>(['b3d', 'nbs', 'green', 'water', 'flow']));
   const toggleLayer = (k: Layer) => setLayers(prev => { const n = new Set(prev); n.has(k) ? n.delete(k) : n.add(k); return n; });
 
   // Load live Freeway 1 + YouBike feeds on mount (powers Today, Twin, and Move) and refresh every 5 min while visible.
@@ -768,13 +771,24 @@ export function App() {
     return () => { clearInterval(id); document.removeEventListener('visibilitychange', load); };
   }, []);
 
-  // Heavy Twin layers (eco + Sentinel-2 NDVI grid) load on first visit to Twin
+  // Heavy Twin layers (eco + Sentinel-2 NDVI grid + NbS field survey) load on first visit to Twin
   useEffect(() => {
     if (lens !== 'twin') return;
     if (!eco) fetch('/data/eco.json').then(r => r.json() as Promise<Eco>).then(setEco).catch(() => {});
     if (!ndvi) fetch('/data/ndvi.json').then(r => r.json()).then(setNdvi).catch(() => {});
-  }, [lens, eco, ndvi]);
-  const twin = useMemo(() => ({ eco, ndvi, live, layers }), [eco, ndvi, live, layers]);
+    if (!nbs) fetch('/data/nbs.json').then(r => r.json() as Promise<NbsDataset>).then(setNbs).catch(() => {});
+  }, [lens, eco, ndvi, nbs]);
+  const selectNbs = (id: string) => {
+    setSelectedBuildingId(null);
+    setSelectedNbsId(id);
+    const it = nbs?.items.find(x => x.id === id);
+    if (it?.coord) setFocusCoord(prev => ({ coord: it.coord!, seq: (prev?.seq ?? 0) + 1 }));
+    revealInspector();
+  };
+  const twin = useMemo(
+    () => ({ eco, ndvi, live, nbs, selectedNbsId, onSelectNbs: selectNbs, layers }),
+    [eco, ndvi, live, nbs, selectedNbsId, layers],
+  );
 
   useEffect(() => {
     const id = setInterval(() => setClock(taipei(new Date())), 30000);
@@ -902,6 +916,16 @@ export function App() {
           </ul>
         )}
 
+        {selectedNbsId && nbs && (
+          <NbsInspector
+            dataset={nbs}
+            selectedId={selectedNbsId}
+            onSelect={selectNbs}
+            onClose={() => setSelectedNbsId(null)}
+            l={l}
+          />
+        )}
+
         {selectedBuilding && campus && (
           <BuildingInspector
             building={selectedBuilding}
@@ -925,6 +949,9 @@ export function App() {
             live={live}
             campus={campus}
             dir={dir}
+            nbs={nbs}
+            selectedNbsId={selectedNbsId}
+            onSelectNbs={selectNbs}
             layers={layers}
             onToggle={k => { toggleLayer(k); if (!shownForLayers.current) { shownForLayers.current = true; showMap(); } }}
             onFocusCoord={coord => { setFocusCoord(prev => ({ coord, seq: (prev?.seq ?? 0) + 1 })); showMap(); }}
@@ -969,6 +996,7 @@ export function App() {
           campus={campus}
           selectedBuildingId={selectedBuildingId}
           onSelectBuilding={id => {
+            setSelectedNbsId(null);
             if (id === selectedBuildingId) revealInspector();
             else inspectFromMap.current = true;
             focusBuilding(id);

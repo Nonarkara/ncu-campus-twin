@@ -21,8 +21,16 @@ import { DOCK_EN } from './shared/live';
 setWorkerUrl(workerUrl);
 
 export type Lens = 'today' | 'twin' | 'power' | 'move' | 'find';
-export type TwinLayer = 'green' | 'water' | 'bio' | 'flow' | 'b3d';
-export interface TwinData { eco: any; ndvi: any; live: import('./shared/live').Live | null; layers: Set<TwinLayer> }
+export type TwinLayer = 'green' | 'water' | 'bio' | 'flow' | 'b3d' | 'nbs';
+export interface TwinData {
+  eco: any;
+  ndvi: any;
+  live: import('./shared/live').Live | null;
+  nbs: import('./NbsInspector').NbsDataset | null;
+  selectedNbsId: string | null;
+  onSelectNbs: (id: string) => void;
+  layers: Set<TwinLayer>;
+}
 const BOUNDS: [number, number, number, number] = [121.1849, 24.9651, 121.1968, 24.9717]; // OSM relation/18727079 bbox
 const INK = 'rgba(230,237,243,';
 const AMBER = '#f59e0b';
@@ -86,8 +94,10 @@ export function CampusMap({
 
   const onSelectBuildingRef = useRef(onSelectBuilding);
   const onSelectStopRef = useRef(onSelectStop);
+  const onSelectNbsRef = useRef(twin.onSelectNbs);
   onSelectBuildingRef.current = onSelectBuilding;
   onSelectStopRef.current = onSelectStop;
+  onSelectNbsRef.current = twin.onSelectNbs;
 
   useEffect(() => {
     const m = new MLMapCtor({
@@ -178,8 +188,8 @@ export function CampusMap({
         paint: { 'line-color': AMBER, 'line-width': 1, 'line-dasharray': [3, 3] },
       });
 
-      // Twin lens: Sentinel-2 NDVI grid, water network, wildlife pins, live docks and detectors
-      for (const id of ['ndvi', 'water', 'bio', 'docks', 'vd']) m.addSource(id, { type: 'geojson', data: EMPTY_FC });
+      // Twin lens: Sentinel-2 NDVI grid, water network, wildlife pins, live docks, detectors, and NbS field dots
+      for (const id of ['ndvi', 'water', 'bio', 'docks', 'vd', 'nbs']) m.addSource(id, { type: 'geojson', data: EMPTY_FC });
       m.addLayer({ id: 'ndvi', type: 'fill', source: 'ndvi', layout: { visibility: 'none' }, paint: {
         'fill-color': ['case', ['<=', ['get', 'd'], -0.15], 'rgba(245,158,11,0.6)',
           ['interpolate', ['linear'], ['get', 'v'], 0.1, INK + '0)', 0.4, INK + '0.10)', 0.8, INK + '0.32)']] } });
@@ -214,6 +224,8 @@ export function CampusMap({
           'circle-stroke-color': ['case', ['<=', ['get', 'bikes'], 2], AMBER, '#e6edf3'], 'circle-stroke-width': 2 } });
       m.addLayer({ id: 'vd', type: 'circle', source: 'vd', layout: { visibility: 'none' },
         paint: { 'circle-radius': 6, 'circle-color': ['case', ['<', ['coalesce', ['get', 'speed'], 999], 40], AMBER, '#e6edf3'], 'circle-stroke-color': '#0a0e14', 'circle-stroke-width': 2 } });
+      m.addLayer({ id: 'nbs', type: 'circle', source: 'nbs', layout: { visibility: 'none' },
+        paint: { 'circle-radius': 7, 'circle-color': AMBER, 'circle-stroke-color': '#e6edf3', 'circle-stroke-width': 2 } });
 
       // Straight-line radial screening links from HV substation to selected roofs (Power lens)
       m.addLayer({
@@ -312,6 +324,16 @@ export function CampusMap({
         // touch has no hover: a tap shows the same line
         m.on('click', id, (e: any) => { const f = e.features?.[0]; if (f) setHoverText(JSON.stringify({ kind: id, p: f.properties })); });
       }
+      m.on('mouseenter', 'nbs', () => { m.getCanvas().style.cursor = 'pointer'; });
+      m.on('mouseleave', 'nbs', () => { m.getCanvas().style.cursor = ''; setHoverText(null); });
+      m.on('mousemove', 'nbs', (e: any) => {
+        const f = e.features?.[0];
+        if (f) setHoverText(JSON.stringify({ kind: 'nbs', p: f.properties }));
+      });
+      m.on('click', 'nbs', (e: any) => {
+        const f = e.features?.[0];
+        if (f?.properties?.id) onSelectNbsRef.current(f.properties.id);
+      });
       let hovered: string | null = null;
       for (const layerId of ['bld', 'bld-3d']) {
         m.on('mousemove', layerId, (e: any) => {
@@ -497,7 +519,17 @@ export function CampusMap({
     set('bio', twin.eco?.bio.pins);
     set('docks', { type: 'FeatureCollection', features: (twin.live?.docks.data ?? []).map(d => ({ type: 'Feature', properties: d, geometry: { type: 'Point', coordinates: [d.lon, d.lat] } })) });
     set('vd', { type: 'FeatureCollection', features: (twin.live?.road.data ?? []).map(f => ({ type: 'Feature', properties: { ...f, label: f.label.join(' / ') }, geometry: { type: 'Point', coordinates: [f.lon, f.lat] } })) });
-  }, [ready, twin.ndvi, twin.eco, twin.live]);
+    set('nbs', {
+      type: 'FeatureCollection',
+      features: (twin.nbs?.items ?? [])
+        .filter(it => it.coord !== null)
+        .map(it => ({
+          type: 'Feature',
+          properties: { id: it.id, title_en: it.title[0], title_zh: it.title[1], category: it.category },
+          geometry: { type: 'Point', coordinates: it.coord! },
+        })),
+    });
+  }, [ready, twin.ndvi, twin.eco, twin.live, twin.nbs]);
 
   // Twin visibility + camera: tilt into 3D on entering the Twin lens, flat elsewhere
   useEffect(() => {
@@ -509,7 +541,14 @@ export function CampusMap({
     vis('water-area', on('water')); vis('water-line', on('water'));
     vis('bio', on('bio'));
     vis('docks', on('flow')); vis('vd', on('flow'));
+    vis('nbs', on('nbs'));
     vis('bld-3d', on('b3d'));
+    if (m.getLayer('nbs')) {
+      const selNbs: ExpressionSpecification = twin.selectedNbsId ? ['==', ['get', 'id'], twin.selectedNbsId] : ['==', ['get', 'id'], '__none__'];
+      m.setPaintProperty('nbs', 'circle-radius', ['case', selNbs, 9.5, 7]);
+      m.setPaintProperty('nbs', 'circle-color', ['case', selNbs, '#e6edf3', AMBER]);
+      m.setPaintProperty('nbs', 'circle-stroke-color', ['case', selNbs, AMBER, '#e6edf3']);
+    }
     const reduced = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
     if (lens === 'twin' && twin.layers.has('b3d')) {
       m.dragRotate.enable(); m.touchZoomRotate.enableRotation();
@@ -518,7 +557,7 @@ export function CampusMap({
       m.dragRotate.disable(); m.touchZoomRotate.disableRotation();
       if (m.getPitch() > 0 || m.getBearing() !== 0) m.easeTo({ pitch: 0, bearing: 0, duration: reduced ? 0 : 300 });
     }
-  }, [lens, ready, twin.layers]);
+  }, [lens, ready, twin.layers, twin.selectedNbsId]);
 
   // Smoothly focus on selected building or stop (respects reduced motion)
   useEffect(() => {
@@ -550,6 +589,8 @@ export function CampusMap({
       legend = `${l === 'en' ? lab[0] : lab[1]} · ${f.speed ?? '—'} km/h · ${Number(f.vph).toLocaleString('en-US')} ${l === 'en' ? 'veh/h' : '輛/時'} · Freeway Bureau VD`;
     } else if (parsed.kind === 'bio') {
       legend = `${parsed.p.vn && parsed.p.vn !== parsed.p.sp ? parsed.p.vn + ' · ' : ''}${parsed.p.sp} · ${parsed.p.y} · ±${parsed.p.u} m · GBIF`;
+    } else if (parsed.kind === 'nbs') {
+      legend = `NbS · ${l === 'en' ? parsed.p.title_en : parsed.p.title_zh} · ${l === 'en' ? 'click to inspect photo' : '點選檢視現地照片'}`;
     } else if (parsed.kind === 'stop') {
       legend = `${l === 'en' ? 'Bus stop' : '公車站'} · ${parsed.name}`;
     } else {

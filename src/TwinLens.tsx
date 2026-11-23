@@ -6,11 +6,13 @@ import type { Live } from './shared/live';
 import { SLOW_KMH, DOCK_EN } from './shared/live';
 import type { CampusData } from './shared/campus';
 import type { Directory } from './FindLens';
+import { NbsGallery, type NbsDataset } from './NbsInspector';
 
 type L = 'en' | 'zh';
-export type Layer = 'green' | 'water' | 'bio' | 'flow' | 'b3d';
+export type Layer = 'green' | 'water' | 'bio' | 'flow' | 'b3d' | 'nbs';
 export const LAYERS: { k: Layer; t: [string, string] }[] = [
   { k: 'b3d', t: ['3D', '立體'] },
+  { k: 'nbs', t: ['NbS', '自然解方'] },
   { k: 'green', t: ['Green', '綠覆'] },
   { k: 'water', t: ['Water', '水系'] },
   { k: 'flow', t: ['Flow', '交通'] },
@@ -59,8 +61,9 @@ export interface Ndvi {
   grid?: { features: { properties: { v: number; p: number; d: number } }[] };
 }
 
-export function TwinLens({ eco, ndvi, live, campus, dir, layers, onToggle, onFocusCoord, l }: {
+export function TwinLens({ eco, ndvi, live, campus, dir, nbs, selectedNbsId, onSelectNbs, layers, onToggle, onFocusCoord, l }: {
   eco: Eco | null; ndvi: Ndvi | null; live: Live | null; campus: CampusData | null; dir: Directory | null;
+  nbs: NbsDataset | null; selectedNbsId: string | null; onSelectNbs: (id: string) => void;
   layers: Set<Layer>; onToggle: (k: Layer) => void; onFocusCoord?: (coord: [number, number]) => void; l: L;
 }) {
   const delta = ndvi ? Math.round((ndvi.green_share_now - ndvi.green_share_prev) * 10) / 10 : null;
@@ -217,6 +220,8 @@ export function TwinLens({ eco, ndvi, live, campus, dir, layers, onToggle, onFoc
           </li>
         )}
       </ul>
+
+      {nbs && <NbsGallery dataset={nbs} selectedId={selectedNbsId} onSelect={onSelectNbs} l={l} />}
 
       {eco && (
         <details className="off">

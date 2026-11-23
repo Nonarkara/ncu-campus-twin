@@ -1,0 +1,295 @@
+{
+  "meta": {
+    "source": "Dr Non campus field survey (Nothing Phone 3a Pro)",
+    "tier": "observed",
+    "asOf": "2026-11-23",
+    "note": "19 NbS field photos taken 2026-11-23 13:12–13:23 TPE. Phone EXIF recorded GPS as 0,0, so only 2 sites with unmistakable landmarks in frame are pinned to verified OSM coordinates; 17 remain honestly unpinned until GPS-intact originals are supplied."
+  },
+  "items": [
+    {
+      "id": "nbs-02",
+      "takenAt": "2026-11-23T13:12:02+08:00",
+      "src": "/data/nbs/nbs-02.jpg",
+      "category": "water",
+      "functions": ["infiltration", "shade", "cooling"],
+      "title": ["Permeable Brick Corridor & Shaded Facade", "透水磚通道與綠蔭遮陽立面"],
+      "summary": [
+        "Interlocking permeable brick pavers and a continuous linear drainage trench capture stormwater along the walkway, while raised tree planters and an overarching mature canopy shade the adjacent building facade to cut cooling loads.",
+        "連鎖透水磚與連續線形排水溝截留步道降雨逕流，兩側高架植栽槽與成蔭喬木遮蔽相鄰建築立面，降低室內空調負荷。"
+      ],
+      "locationTier": "unpinned",
+      "locationNote": ["Unpinned (phone GPS EXIF was 0,0)", "未標點（手機 EXIF GPS 為 0,0）"],
+      "coord": null
+    },
+    {
+      "id": "nbs-03",
+      "takenAt": "2026-11-23T13:12:48+08:00",
+      "src": "/data/nbs/nbs-03.jpg",
+      "category": "shade",
+      "functions": ["shade", "infiltration", "cooling"],
+      "title": ["Pine–Banyan Forest Grove & Bioretention Island", "松榕混合林與植生滯留島"],
+      "summary": [
+        "A multi-layered pine and banyan canopy intercepts rainfall and cools the bicycle parking zone, while a dense curbside shrub island surrounded by brick pavers slows surface runoff and promotes local soil infiltration.",
+        "多層次松樹與榕樹樹冠截留雨水並降低自行車停車區溫度，步道旁灌木植栽島結合透水鋪面減緩地表逕流並促進下滲。"
+      ],
+      "locationTier": "unpinned",
+      "locationNote": ["Unpinned (phone GPS EXIF was 0,0)", "未標點（手機 EXIF GPS 為 0,0）"],
+      "coord": null
+    },
+    {
+      "id": "nbs-04",
+      "takenAt": "2026-11-23T13:13:09+08:00",
+      "src": "/data/nbs/nbs-04.jpg",
+      "category": "water",
+      "functions": ["runoff", "infiltration", "habitat"],
+      "title": ["Broadleaf Understory Rain-Garden Bed", "闊葉下層植栽雨水花園"],
+      "summary": [
+        "Dense broadleaf groundcover beneath mature canopy trees borders a permeable cobble bike bay, absorbing sheet flow from adjacent paving, retaining soil moisture, and providing shaded urban micro-habitat.",
+        "高大喬木下的濃密闊葉地被緊鄰透水石磚車位，吸收鄰近鋪面漫流、保持土壤含水並提供遮蔭微棲地。"
+      ],
+      "locationTier": "unpinned",
+      "locationNote": ["Unpinned (phone GPS EXIF was 0,0)", "未標點（手機 EXIF GPS 為 0,0）"],
+      "coord": null
+    },
+    {
+      "id": "nbs-05",
+      "takenAt": "2026-11-23T13:13:32+08:00",
+      "src": "/data/nbs/nbs-05.jpg",
+      "category": "windbreak",
+      "functions": ["windbreak", "shade"],
+      "title": ["Araucaria Windbreak & Courtyard Edge Buffer", "南洋杉防風林與廣場植栽緩衝帶"],
+      "summary": [
+        "Towering Araucaria conifers act as a vertical windbreak against Zhongli's strong seasonal monsoon gusts while casting afternoon shade across the open bicycle courtyard; foreground Cordyline shrubs soften wind turbulence at pedestrian height.",
+        "高聳南洋杉阻擋中壢強勁季風並為開闊自行車廣場提供高空遮蔭，前景朱蕉灌木帶減緩行人高度的陣風擾流。"
+      ],
+      "locationTier": "unpinned",
+      "locationNote": ["Unpinned (phone GPS EXIF was 0,0)", "未標點（手機 EXIF GPS 為 0,0）"],
+      "coord": null
+    },
+    {
+      "id": "nbs-06",
+      "takenAt": "2026-11-23T13:14:02+08:00",
+      "src": "/data/nbs/nbs-06.jpg",
+      "category": "water",
+      "functions": ["runoff", "shade", "infiltration"],
+      "title": ["Vegetated Berm & Pine-Shaded Permeable Walk", "植草土坡與松蔭透水人行道"],
+      "summary": [
+        "A grassed earth berm on the upslope side absorbs hillside runoff before it reaches the footpath, while roadside shrub buffers and mature pines shade the jointed paver walkway and filter vehicle dust.",
+        "上坡側植草土坡先行吸收坡面逕流，道路側灌木帶與成排老松為透水地磚步道提供遮蔭並阻隔車行揚塵。"
+      ],
+      "locationTier": "unpinned",
+      "locationNote": ["Unpinned (phone GPS EXIF was 0,0)", "未標點（手機 EXIF GPS 為 0,0）"],
+      "coord": null
+    },
+    {
+      "id": "nbs-07",
+      "takenAt": "2026-11-23T13:14:15+08:00",
+      "src": "/data/nbs/nbs-07.jpg",
+      "category": "shade",
+      "functions": ["shade", "cooling", "runoff"],
+      "title": ["Arching Pine–Ficus Green Tunnel Corridor", "松榕拱頂林蔭道路廊道"],
+      "summary": [
+        "Overlapping pine and banyan crowns form a continuous living roof over the campus road, dramatically lowering asphalt surface heat, shielding cyclists from solar radiation, and pairing with curbside shrub strips that intercept road runoff.",
+        "交織的松樹與榕樹樹冠在環校道路上方形成連續林蔭隧道，顯著降低柏油路面熱島效應，為單車騎士遮陽並以路緣灌木攔截路面逕流。"
+      ],
+      "locationTier": "unpinned",
+      "locationNote": ["Unpinned (phone GPS EXIF was 0,0)", "未標點（手機 EXIF GPS 為 0,0）"],
+      "coord": null
+    },
+    {
+      "id": "nbs-08",
+      "takenAt": "2026-11-23T13:16:12+08:00",
+      "src": "/data/nbs/nbs-08.jpg",
+      "category": "shade",
+      "functions": ["infiltration", "shade", "windbreak"],
+      "title": ["Linear Pine Grove & Pervious Sponge Lawn", "線狀松林與透水草坪海綿帶"],
+      "summary": [
+        "A mature row of pines over unsealed turf and needle litter functions as a deep-soil sponge for heavy rain, filtering campus winds and delivering continuous dappled shade along the open lawn edge.",
+        "未封閉草地與松針落葉層上方的成排老松構成深層土壤海綿，吸收強降雨、過濾強風並提供大面積林下遮蔭。"
+      ],
+      "locationTier": "unpinned",
+      "locationNote": ["Unpinned (phone GPS EXIF was 0,0)", "未標點（手機 EXIF GPS 為 0,0）"],
+      "coord": null
+    },
+    {
+      "id": "nbs-09",
+      "takenAt": "2026-11-23T13:17:22+08:00",
+      "src": "/data/nbs/nbs-09.jpg",
+      "category": "water",
+      "functions": ["infiltration", "cooling"],
+      "title": ["Open Permeable Detention Lawn", "大面積透水保水草坪"],
+      "summary": [
+        "A broad unsealed grass meadow framed by mature pines and sculpted ficus acts as a campus-scale stormwater infiltration basin and daytime evaporative cool-island between academic buildings.",
+        "松樹與榕樹環繞的開闊未硬化草坪，兼具校園尺度雨水入滲蓄水池與日間蒸散降溫冷島功能。"
+      ],
+      "locationTier": "unpinned",
+      "locationNote": ["Unpinned (phone GPS EXIF was 0,0)", "未標點（手機 EXIF GPS 為 0,0）"],
+      "coord": null
+    },
+    {
+      "id": "nbs-10",
+      "takenAt": "2026-11-23T13:17:58+08:00",
+      "src": "/data/nbs/nbs-10.jpg",
+      "category": "water",
+      "functions": ["runoff", "infiltration"],
+      "title": ["Terraced Shuanglianpo Escarpment Slope (Overlook)", "雙連坡階梯式植生護坡（觀景台）"],
+      "summary": [
+        "Contoured turf terraces and layered low hedges stabilize NCU's elevated Shuanglianpo plateau edge overlooking Zhongli, stepping down stormwater velocity and increasing infiltration before runoff enters lower city drains.",
+        "俯瞰中壢的雙連坡台地邊緣以階梯式草坪與綠籬穩固邊坡，分段減緩暴雨流速並增加入滲，減輕下游市區排水負擔。"
+      ],
+      "locationTier": "landmark",
+      "locationNote": ["Landmark-matched to OSM 觀景台 (GPS EXIF was 0,0)", "依地標對應 OSM 觀景台（原始 EXIF GPS 為 0,0）"],
+      "coord": [121.195563, 24.967915]
+    },
+    {
+      "id": "nbs-11",
+      "takenAt": "2026-11-23T13:18:04+08:00",
+      "src": "/data/nbs/nbs-11.jpg",
+      "category": "windbreak",
+      "functions": ["windbreak", "shade", "cooling"],
+      "title": ["Casuarina Windbreak & Shaded Seating Terrace", "木麻黃防風林與林下休憩平台"],
+      "summary": [
+        "Feathery Casuarina trees buffer strong gusts across a raised stone terrace and shrub planter, creating a cool, wind-sheltered outdoor study and social space with direct thermal-comfort co-benefits.",
+        "羽狀木麻黃樹群在石砌座椅與植栽槽上方形成防風與遮蔭微氣候，為師生提供涼爽避風的戶外交流空間。"
+      ],
+      "locationTier": "unpinned",
+      "locationNote": ["Unpinned (phone GPS EXIF was 0,0)", "未標點（手機 EXIF GPS 為 0,0）"],
+      "coord": null
+    },
+    {
+      "id": "nbs-12",
+      "takenAt": "2026-11-23T13:19:11+08:00",
+      "src": "/data/nbs/nbs-12.jpg",
+      "category": "shade",
+      "functions": ["shade", "cooling", "infiltration"],
+      "title": ["Car-Free Shaded Pedestrian & Cycle Greenway", "無機動車林蔭步行單車綠道"],
+      "summary": [
+        "Dense Araucaria and banyan canopies arch over a dedicated pedestrian-and-bicycle spine flanked by continuous unsealed planting strips and cobble bike bays, encouraging zero-emission campus travel by cutting midday heat stress.",
+        "南洋杉與榕樹覆蓋無汽機車通行的步行單車主軸，兩側配以連續植生滲水帶與透水車位，降低熱負荷並促進低碳通勤。"
+      ],
+      "locationTier": "unpinned",
+      "locationNote": ["Unpinned (phone GPS EXIF was 0,0)", "未標點（手機 EXIF GPS 為 0,0）"],
+      "coord": null
+    },
+    {
+      "id": "nbs-13",
+      "takenAt": "2026-11-23T13:19:38+08:00",
+      "src": "/data/nbs/nbs-13.jpg",
+      "category": "water",
+      "functions": ["runoff", "windbreak", "shade"],
+      "title": ["Curbside Bioswale Planter & Hillside Windbreak", "路緣植生過濾帶與坡緣木麻黃防風林"],
+      "summary": [
+        "A sunken strap-leaf groundcover bed separates the roadway from shaded bicycle and accessible parking along the hillside Casuarina belt, intercepting curb runoff and trapping road particulates.",
+        "路緣帶狀植栽床區隔車道與林下停車區，搭配坡緣木麻黃防風林截留路面逕流並過濾懸浮微粒。"
+      ],
+      "locationTier": "unpinned",
+      "locationNote": ["Unpinned (phone GPS EXIF was 0,0)", "未標點（手機 EXIF GPS 為 0,0）"],
+      "coord": null
+    },
+    {
+      "id": "nbs-14",
+      "takenAt": "2026-11-23T13:19:51+08:00",
+      "src": "/data/nbs/nbs-14.jpg",
+      "category": "ecology",
+      "functions": ["facade", "cooling", "runoff"],
+      "title": ["Climbing Green Facade at NCU Black Box Theater", "黑盒子劇場攀緣綠牆（人文社會科學大樓）"],
+      "summary": [
+        "Dense creeping fig (Ficus pumila) and base grasses carpet the concrete stair retaining wall at NCU Black Box Theater, lowering wall surface temperatures, cutting radiant glare, and absorbing rainwater at the wall toe.",
+        "黑盒子劇場外梯擋土牆覆滿薜荔攀緣植生與基部草帶，有效降低混凝土牆面溫度、減少眩光並吸收牆腳雨水。"
+      ],
+      "locationTier": "landmark",
+      "locationNote": ["Landmark-matched to 人文社會科學大樓 (way/268845976; GPS EXIF was 0,0)", "依招牌對應人文社會科學大樓（原始 EXIF GPS 為 0,0）"],
+      "coord": [121.1952, 24.969288]
+    },
+    {
+      "id": "nbs-15",
+      "takenAt": "2026-11-23T13:20:44+08:00",
+      "src": "/data/nbs/nbs-15.jpg",
+      "category": "ecology",
+      "functions": ["carbon", "windbreak", "habitat"],
+      "title": ["Tagged Heritage Pine Asset (Zone A3 #48)", "校內列管松樹自然資產（A3 區編號 48）"],
+      "summary": [
+        "NCU General Affairs individually tags and tracks mature pines as managed living infrastructure—supporting long-term carbon storage, canopy continuity, and pest/windthrow monitoring across campus.",
+        "總務處事務組對校內松樹逐株掛牌建檔，將成熟林木視為長期固碳、維持樹冠連續性與防風防災之自然基礎設施。"
+      ],
+      "locationTier": "unpinned",
+      "locationNote": ["Unpinned (phone GPS EXIF was 0,0)", "未標點（手機 EXIF GPS 為 0,0）"],
+      "coord": null
+    },
+    {
+      "id": "nbs-16",
+      "takenAt": "2026-11-23T13:21:22+08:00",
+      "src": "/data/nbs/nbs-16.jpg",
+      "category": "ecology",
+      "functions": ["infiltration", "runoff", "habitat"],
+      "title": ["Mature Banyan Root Complex & Linear Edge Swale", "老榕氣根群與步道緣植生截水帶"],
+      "summary": [
+        "Extensive banyan aerial roots and an unsealed groundcover border alongside the footpath aerate compacted soil, capture lateral walkway runoff, and sustain multi-species urban canopy habitat.",
+        "老榕發達氣根群與步道旁帶狀植栽鬆動土壤、攔截步道側向排水，並支撐多層次校園生態棲地。"
+      ],
+      "locationTier": "unpinned",
+      "locationNote": ["Unpinned (phone GPS EXIF was 0,0)", "未標點（手機 EXIF GPS 為 0,0）"],
+      "coord": null
+    },
+    {
+      "id": "nbs-17",
+      "takenAt": "2026-11-23T13:22:03+08:00",
+      "src": "/data/nbs/nbs-17.jpg",
+      "category": "shade",
+      "functions": ["shade", "cooling", "infiltration"],
+      "title": ["Sculptural Multi-Stem Banyan Shade Umbrella", "大型多幹老榕遮蔭傘與透水廣場"],
+      "summary": [
+        "A sprawling multi-stem banyan casts deep shade over both an unsealed turf root zone and an adjacent interlocking paver plaza, cutting pedestrian heat exposure while keeping the entire root footprint permeable.",
+        "展開的多幹老榕為下方未硬化草坪與鄰接透水磚廣場提供大面積深蔭，顯著降低行人熱暴露並維持完整根系透水區。"
+      ],
+      "locationTier": "unpinned",
+      "locationNote": ["Unpinned (phone GPS EXIF was 0,0)", "未標點（手機 EXIF GPS 為 0,0）"],
+      "coord": null
+    },
+    {
+      "id": "nbs-18",
+      "takenAt": "2026-11-23T13:22:59+08:00",
+      "src": "/data/nbs/nbs-18.jpg",
+      "category": "ecology",
+      "functions": ["habitat", "infiltration", "shade"],
+      "title": ["Multi-Tiered Woodland & Shrub Succession Belt", "多層次林下灌木與幼松演替帶"],
+      "summary": [
+        "Stratified canopy trees, young replacement pines, dense flowering shrubs, and unsealed turf flank a narrow campus footpath—boosting urban biodiversity while intercepting rain at every vertical layer.",
+        "成木、補植幼松、茂密灌叢與自然草地沿窄步道形成垂直複層結構，提升校園生物多樣性並分層截留降雨。"
+      ],
+      "locationTier": "unpinned",
+      "locationNote": ["Unpinned (phone GPS EXIF was 0,0)", "未標點（手機 EXIF GPS 為 0,0）"],
+      "coord": null
+    },
+    {
+      "id": "nbs-19",
+      "takenAt": "2026-11-23T13:23:09+08:00",
+      "src": "/data/nbs/nbs-19.jpg",
+      "category": "windbreak",
+      "functions": ["windbreak", "shade", "infiltration"],
+      "title": ["Conifer–Cypress Windbreak Pedestrian Spine", "針葉柏樹防風綠廊步道"],
+      "summary": [
+        "Dense vertical cypress and pine rows line both edges of a straight pedestrian-cycle axis above wide unsealed grass flanks, channeling cool shaded air while dampening crosswinds and absorbing path runoff.",
+        "成排直立柏樹與松樹夾道並配以寬闊未硬化草帶，為步行單車主軸阻擋側風、導入涼爽氣流並吸收步道雨水。"
+      ],
+      "locationTier": "unpinned",
+      "locationNote": ["Unpinned (phone GPS EXIF was 0,0)", "未標點（手機 EXIF GPS 為 0,0）"],
+      "coord": null
+    },
+    {
+      "id": "nbs-20",
+      "takenAt": "2026-11-23T13:23:28+08:00",
+      "src": "/data/nbs/nbs-20.jpg",
+      "category": "water",
+      "functions": ["runoff", "infiltration", "habitat"],
+      "title": ["Dry-Stream Cobble Rain Garden & Detention Basin", "卵石生態滯洪雨水花園與跳石乾溪"],
+      "summary": [
+        "A textbook Sponge-City NbS: a sunken cobble-lined dry basin with elevated stepping stones, wetland sedges, and ginger temporarily detains heavy-rain surge water, slows peak discharge, and filters runoff through gravel joints and roots.",
+        "典型的海綿校園自然解方：下凹式卵石乾溪滯洪池結合跳石步道與濕生植物，暴雨時暫存尖峰逕流、減緩洪峰並透過礫石縫隙與根系過濾淨化。"
+      ],
+      "locationTier": "unpinned",
+      "locationNote": ["Unpinned (phone GPS EXIF was 0,0)", "未標點（手機 EXIF GPS 為 0,0）"],
+      "coord": null
+    }
+  ]
+}
