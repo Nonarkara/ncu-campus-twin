@@ -21,6 +21,7 @@ describe('microgrid islanding physics', () => {
 
   it('returns null todayPvKwh when GHI is missing (never invents zero)', () => {
     expect(todayPvKwh(250, makeHourly(null, 8))).toBeNull();
+    expect(todayPvKwh(250, [...makeHourly(500, 4), ...makeHourly(null, 1)])).toBeNull();
     expect(todayPvKwh(250, makeHourly(500, 4))).toBe(400); // 100 kW * 4 h
   });
 

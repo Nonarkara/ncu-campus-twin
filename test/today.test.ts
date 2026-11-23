@@ -25,6 +25,36 @@ describe('Today engine', () => {
     expect(t.items[0]).toMatchObject({ id: 'rain-heavy', level: 'act', by: '12:00' });
   });
 
+  it('detects an intense hour in the second half of the forecast across midnight', () => {
+    const f = fc(); f.data!.precip[25] = RULES.heavyRainHour.mm;
+    expect(buildToday(MON_0900_TPE, f, air(10)).items).toContainEqual(expect.objectContaining({
+      id: 'rain-heavy', by: '01:00', rule: RULES.heavyRainHour.src,
+    }));
+  });
+
+  it('labels a 24-hour accumulation with the 24-hour rule', () => {
+    const f = fc(); f.data!.precip.fill(4, 9, 29);
+    expect(buildToday(MON_0900_TPE, f, air(10)).items).toContainEqual(expect.objectContaining({
+      id: 'rain-heavy', rule: RULES.heavyRainDay.src,
+    }));
+  });
+
+  it('omits an incomplete chart and total while retaining a known rain alert', () => {
+    const f = fc(); f.data!.precip[9] = null; f.data!.temp[25] = null; f.data!.precip[25] = 40;
+    const t = buildToday(MON_0900_TPE, f, air(10));
+    expect(t.hourly).toEqual([]);
+    expect(t.forecastMeta).toMatchObject({ tier: 'unavailable', asOf: null });
+    expect(t.steady.map(s => s.id)).not.toContain('weather');
+    expect(t.items.find(i => i.id === 'rain-heavy')?.detail[0]).toBe('40 mm/h at 01:00');
+  });
+
+  it('omits invalid air readings while accepting a real zero', () => {
+    for (const invalid of [NaN, Infinity, -1]) {
+      expect(buildToday(MON_0900_TPE, fc(), air(invalid)).steady.map(s => s.id)).not.toContain('air');
+    }
+    expect(buildToday(MON_0900_TPE, fc(), air(0)).steady.find(s => s.id === 'air')?.value[0]).toContain('0 µg/m³');
+  });
+
   it('PM2.5 orange band triggers, just below does not', () => {
     expect(buildToday(MON_0900_TPE, fc(), air(35.5)).items.map(i => i.id)).toContain('pm25');
     expect(buildToday(MON_0900_TPE, fc(), air(35.4)).items.map(i => i.id)).not.toContain('pm25');

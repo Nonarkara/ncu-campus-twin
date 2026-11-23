@@ -21,14 +21,17 @@ async function getJson(url: string, ms = 12000) {
   return r.json() as Promise<any>;
 }
 
-async function forecast(): Promise<Feed<Forecast>> {
+async function forecast(now: Date): Promise<Feed<Forecast>> {
   const source = 'Open-Meteo forecast';
   try {
     const j = await getJson(`https://api.open-meteo.com/v1/forecast?latitude=${LAT}&longitude=${LON}&timezone=Asia%2FTaipei&forecast_days=2` +
       '&hourly=precipitation,precipitation_probability,temperature_2m,wind_gusts_10m,uv_index,shortwave_radiation&wind_speed_unit=ms');
     const h = j.hourly;
+    if (![h.time, h.precipitation, h.precipitation_probability, h.temperature_2m, h.wind_gusts_10m, h.uv_index].every(Array.isArray)) {
+      throw new Error('Incomplete hourly forecast');
+    }
     // asOf = the forecast hour the 'now' values come from (Asia/Taipei slot), not the request time
-    const slot = new Date(Date.now() + 8 * 3600e3).toISOString().slice(0, 13) + ':00';
+    const slot = new Date(now.getTime() + 8 * 3600e3).toISOString().slice(0, 13) + ':00';
     const asOf = (h.time as string[]).includes(slot) ? `${slot}:00+08:00` : null;
     return { meta: { source, tier: 'forecast', asOf },
       data: { time: h.time, precip: h.precipitation, prob: h.precipitation_probability, temp: h.temperature_2m, gust: h.wind_gusts_10m, uv: h.uv_index, ghi: h.shortwave_radiation } };
@@ -93,7 +96,7 @@ export default {
     if (url.pathname === '/api/live') return secure(await live(env));
     if (url.pathname === '/api/news') return secure(await news(env, url, ctx));
     if (url.pathname !== '/api/today') return secure(await env.ASSETS.fetch(req));
-    return secure(await today(req, url, ctx));
+    return secure(await today(url, ctx));
   },
 };
 
@@ -181,16 +184,17 @@ async function live(env: Env): Promise<Response> {
   return new Response(JSON.stringify(body), { headers: { 'content-type': 'application/json', 'cache-control': 'public, max-age=60' } });
 }
 
-async function today(req: Request, url: URL, ctx: ExecutionContext): Promise<Response> {
+async function today(url: URL, ctx: ExecutionContext): Promise<Response> {
   {
     const cache = (caches as unknown as { default: Cache }).default;
     // 5-minute bucket in the key: a cached payload can never outlive its slot, whatever the cache does with max-age.
     // (Seen 2026-11-22: an edge served a 3.5 h old payload.) Bump v when the payload shape changes.
-    const key = new Request(`${url.origin}/api/today?v=4&t=${Math.floor(Date.now() / 300000)}`);
+    const now = new Date();
+    const key = new Request(`${url.origin}/api/today?v=5&t=${Math.floor(now.getTime() / 300000)}`);
     const hit = await cache.match(key);
     if (hit) return hit;
-    const [fc, aq] = await Promise.all([forecast(), air()]);
-    const body = JSON.stringify(buildToday(new Date(), fc, aq));
+    const [fc, aq] = await Promise.all([forecast(now), air()]);
+    const body = JSON.stringify(buildToday(now, fc, aq));
     const res = new Response(body, { headers: { 'content-type': 'application/json', 'cache-control': 'public, max-age=300' } });
     ctx.waitUntil(cache.put(key, res.clone()));
     return res;

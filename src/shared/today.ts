@@ -7,8 +7,8 @@ export interface Meta { source: string; tier: Tier; asOf: string | null }
 export interface Feed<T> { data: T | null; meta: Meta }
 
 export interface Forecast {
-  time: string[]; precip: number[]; prob: number[]; temp: number[]; gust: number[]; uv: number[];
-  ghi?: number[]; // shortwave_radiation W/m², optional for backwards compatibility
+  time: string[]; precip: (number | null)[]; prob: (number | null)[]; temp: (number | null)[]; gust: (number | null)[]; uv: (number | null)[];
+  ghi?: (number | null)[]; // shortwave_radiation W/m², optional for backwards compatibility
 }
 export interface HourlyPoint {
   time: string; hm: string; temp: number; precip: number; prob: number; gust: number; uv: number; ghi: number | null;
@@ -54,59 +54,68 @@ export function upcoming(rows: Row[], col: 1 | 2, hm: string, weekend: boolean) 
 }
 
 const fmtH = (iso: string) => iso.slice(11, 16);
+const isReading = (n: unknown): n is number => typeof n === 'number' && Number.isFinite(n);
 
 export function buildToday(now: Date, fc: Feed<Forecast>, air: Feed<Air>): Today {
-  const { hm, weekend } = taipei(now);
+  const { date, hm, weekend } = taipei(now);
   const items: Item[] = [];
   const steady: Steady[] = [];
   const hourly: HourlyPoint[] = [];
+  let forecastMeta: Meta = { ...fc.meta, tier: 'unavailable', asOf: null };
   const ownerOps = '總務處 General Affairs';
   const ownerSafety = '環安中心 Env. & Safety';
 
   if (fc.data) {
     const f = fc.data;
-    const nowIso = taipei(now).date + 'T' + hm;
-    const idx = f.time.map((t, i) => i).filter(i => f.time[i] >= nowIso.slice(0, 13)).slice(0, 24);
-    for (const i of idx) {
+    const start = Date.parse(`${date}T${hm.slice(0, 2)}:00:00Z`);
+    const outdoorEnd = new Date(start + 12 * 3600e3).toISOString().slice(0, 16);
+    const byTime = new Map(f.time.map((t, i) => [t, i]));
+    const points = Array.from({ length: 24 }, (_, offset) => {
+      const time = new Date(start + offset * 3600e3).toISOString().slice(0, 16);
+      const i = byTime.get(time) ?? -1;
+      return { time, hm: fmtH(time), temp: f.temp[i], precip: f.precip[i], prob: f.prob[i], gust: f.gust[i], uv: f.uv[i], ghi: f.ghi?.[i] };
+    });
+    for (const { time, hm, temp, precip, prob, gust, uv, ghi } of points) {
+      if (!isReading(temp) || !isReading(precip) || !isReading(prob) || !isReading(gust) || !isReading(uv)) continue;
       hourly.push({
-        time: f.time[i],
-        hm: fmtH(f.time[i]),
-        temp: f.temp[i] ?? 0,
-        precip: f.precip[i] ?? 0,
-        prob: f.prob[i] ?? 0,
-        gust: f.gust[i] ?? 0,
-        uv: f.uv[i] ?? 0,
-        ghi: f.ghi && typeof f.ghi[i] === 'number' ? f.ghi[i] : null,
+        time, hm, temp, precip, prob, gust, uv, ghi: isReading(ghi) && ghi >= 0 ? ghi : null,
       });
     }
-    const next12 = idx.slice(0, 12);
-    const day = idx.reduce((s, i) => s + (f.precip[i] ?? 0), 0);
-    const peakRain = next12.reduce((m, i) => (f.precip[i] > (f.precip[m] ?? -1) ? i : m), next12[0]);
-    if (peakRain !== undefined && (f.precip[peakRain] >= RULES.heavyRainHour.mm || day >= RULES.heavyRainDay.mm)) {
-      items.push({ id: 'rain-heavy', level: 'act', owner: ownerSafety, by: fmtH(f.time[peakRain]), rule: RULES.heavyRainHour.src, meta: fc.meta,
+    // The console and solar estimate expect a contiguous 24-hour strip.
+    const complete = hourly.length === 24;
+    if (complete) forecastMeta = fc.meta;
+    const rain = points.flatMap(({ hm, precip }) => isReading(precip) ? [{ hm, precip }] : []);
+    const day = rain.length === 24 ? rain.reduce((sum, point) => sum + point.precip, 0) : null;
+    const peakRain = rain.reduce((peak, point) => point.precip > peak.precip ? point : peak, rain[0]);
+    if (peakRain && (peakRain.precip >= RULES.heavyRainHour.mm || (day !== null && day >= RULES.heavyRainDay.mm))) {
+      items.push({ id: 'rain-heavy', level: 'act', owner: ownerSafety, by: peakRain.hm, rule: peakRain.precip >= RULES.heavyRainHour.mm ? RULES.heavyRainHour.src : RULES.heavyRainDay.src, meta: fc.meta,
         title: ['Heavy rain: check drains and low ground', '大雨：巡查排水與低窪處'],
-        detail: [`${f.precip[peakRain].toFixed(0)} mm/h peak at ${fmtH(f.time[peakRain])}; ${day.toFixed(0)} mm in 24 h`, `${fmtH(f.time[peakRain])} 時雨量 ${f.precip[peakRain].toFixed(0)} mm；24 小時 ${day.toFixed(0)} mm`] });
+        detail: [
+          `${peakRain.precip.toFixed(0)} mm/h at ${peakRain.hm}${day === null ? '' : `; ${day.toFixed(0)} mm in 24 h`}`,
+          `${peakRain.hm} 時雨量 ${peakRain.precip.toFixed(0)} mm${day === null ? '' : `；24 小時 ${day.toFixed(0)} mm`}`,
+        ] });
     } else {
-      const wet = next12.find(i => f.precip[i] >= RULES.outdoorRain.mm && f.prob[i] >= RULES.outdoorRain.prob && f.time[i].slice(11, 13) >= '07' && f.time[i].slice(11, 13) <= '22');
-      if (wet !== undefined) items.push({ id: 'rain-outdoor', level: 'watch', owner: ownerOps, by: fmtH(f.time[wet]), rule: RULES.outdoorRain.src, meta: fc.meta,
+      const wet = points.find(p => p.time < outdoorEnd && isReading(p.precip) && p.precip >= RULES.outdoorRain.mm && isReading(p.prob) && p.prob >= RULES.outdoorRain.prob && p.hm >= '07:00' && p.hm <= '22:00');
+      if (wet && isReading(wet.precip)) items.push({ id: 'rain-outdoor', level: 'watch', owner: ownerOps, by: wet.hm, rule: RULES.outdoorRain.src, meta: fc.meta,
         title: ['Rain for outdoor activities', '戶外活動將遇雨'],
-        detail: [`${f.precip[wet].toFixed(1)} mm/h at ${fmtH(f.time[wet])}, ${f.prob[wet]}% chance`, `${fmtH(f.time[wet])} 雨量 ${f.precip[wet].toFixed(1)} mm，機率 ${f.prob[wet]}%`] });
+        detail: [`${wet.precip.toFixed(1)} mm/h at ${wet.hm}, ${wet.prob}% chance`, `${wet.hm} 雨量 ${wet.precip.toFixed(1)} mm，機率 ${wet.prob}%`] });
     }
-    const hot = idx.find(i => f.temp[i] >= RULES.heat.c);
-    if (hot !== undefined) items.push({ id: 'heat', level: 'act', owner: ownerSafety, by: fmtH(f.time[hot]), rule: RULES.heat.src, meta: fc.meta,
-      title: ['Heat: move PE and outdoor work indoors', '高溫：體育課與戶外作業移至室內'], detail: [`${f.temp[hot].toFixed(0)} °C at ${fmtH(f.time[hot])}`, `${fmtH(f.time[hot])} 氣溫 ${f.temp[hot].toFixed(0)} °C`] });
-    const windy = idx.find(i => f.gust[i] >= RULES.gust.ms);
-    if (windy !== undefined) items.push({ id: 'gust', level: 'act', owner: ownerOps, by: fmtH(f.time[windy]), rule: RULES.gust.src, meta: fc.meta,
-      title: ['Strong wind: secure banners, tents, scaffolds', '強風：固定布條、帳篷與鷹架'], detail: [`Gusts ${f.gust[windy].toFixed(0)} m/s at ${fmtH(f.time[windy])}`, `${fmtH(f.time[windy])} 陣風 ${f.gust[windy].toFixed(0)} m/s`] });
-    const sunny = idx.find(i => f.uv[i] >= RULES.uv.idx);
-    if (sunny !== undefined) items.push({ id: 'uv', level: 'watch', owner: ownerSafety, by: fmtH(f.time[sunny]), rule: RULES.uv.src, meta: fc.meta,
-      title: ['High UV: shade for outdoor classes', '紫外線過量：戶外課程需遮蔭'], detail: [`UV ${f.uv[sunny].toFixed(0)} at ${fmtH(f.time[sunny])}`, `${fmtH(f.time[sunny])} 紫外線指數 ${f.uv[sunny].toFixed(0)}`] });
-    const i0 = idx[0];
-    if (i0 !== undefined) steady.push({ id: 'weather', label: ['Weather now', '目前天氣'], meta: fc.meta,
-      value: [`${f.temp[i0].toFixed(0)} °C · ${day.toFixed(0)} mm next 24 h · gust ${f.gust[i0].toFixed(0)} m/s`, `${f.temp[i0].toFixed(0)} °C · 未來 24 小時 ${day.toFixed(0)} mm · 陣風 ${f.gust[i0].toFixed(0)} m/s`] });
+    const hot = points.find(p => isReading(p.temp) && p.temp >= RULES.heat.c);
+    if (hot && isReading(hot.temp)) items.push({ id: 'heat', level: 'act', owner: ownerSafety, by: hot.hm, rule: RULES.heat.src, meta: fc.meta,
+      title: ['Heat: move PE and outdoor work indoors', '高溫：體育課與戶外作業移至室內'], detail: [`${hot.temp.toFixed(0)} °C at ${hot.hm}`, `${hot.hm} 氣溫 ${hot.temp.toFixed(0)} °C`] });
+    const windy = points.find(p => isReading(p.gust) && p.gust >= RULES.gust.ms);
+    if (windy && isReading(windy.gust)) items.push({ id: 'gust', level: 'act', owner: ownerOps, by: windy.hm, rule: RULES.gust.src, meta: fc.meta,
+      title: ['Strong wind: secure banners, tents, scaffolds', '強風：固定布條、帳篷與鷹架'], detail: [`Gusts ${windy.gust.toFixed(0)} m/s at ${windy.hm}`, `${windy.hm} 陣風 ${windy.gust.toFixed(0)} m/s`] });
+    const sunny = points.find(p => isReading(p.uv) && p.uv >= RULES.uv.idx);
+    if (sunny && isReading(sunny.uv)) items.push({ id: 'uv', level: 'watch', owner: ownerSafety, by: sunny.hm, rule: RULES.uv.src, meta: fc.meta,
+      title: ['High UV: shade for outdoor classes', '紫外線過量：戶外課程需遮蔭'], detail: [`UV ${sunny.uv.toFixed(0)} at ${sunny.hm}`, `${sunny.hm} 紫外線指數 ${sunny.uv.toFixed(0)}`] });
+    const first = hourly[0];
+    if (complete && first && day !== null) steady.push({ id: 'weather', label: ['Weather now', '目前天氣'], meta: fc.meta,
+      value: [`${first.temp.toFixed(0)} °C · ${day.toFixed(0)} mm next 24 h · gust ${first.gust.toFixed(0)} m/s`, `${first.temp.toFixed(0)} °C · 未來 24 小時 ${day.toFixed(0)} mm · 陣風 ${first.gust.toFixed(0)} m/s`] });
+    if (!complete) hourly.length = 0;
   }
 
-  if (air.data) {
+  if (air.data && isReading(air.data.pm25) && air.data.pm25 >= 0) {
     if (air.data.pm25 >= RULES.pm25.ug) items.push({ id: 'pm25', level: 'act', owner: ownerSafety, by: null, rule: RULES.pm25.src, meta: air.meta,
       title: ['Poor air: move PE classes indoors', '空品不良：體育課移至室內'], detail: air.data.n ? [`PM2.5 ${air.data.pm25.toFixed(0)} µg/m³ (median of ${air.data.n} sensors)`, `PM2.5 ${air.data.pm25.toFixed(0)} µg/m³（${air.data.n} 個感測器中位數）`] : [`PM2.5 ${air.data.pm25.toFixed(0)} µg/m³ (model estimate)`, `PM2.5 ${air.data.pm25.toFixed(0)} µg/m³（模式推估）`] });
     steady.push({ id: 'air', label: ['Air, PM2.5', '空品 PM2.5'], meta: air.meta, value: [`${air.data.pm25.toFixed(0)} µg/m³ · ${air.data.n ? `median of ${air.data.n} sensors` : 'model estimate'}`, `${air.data.pm25.toFixed(0)} µg/m³ · ${air.data.n ? `${air.data.n} 個感測器中位數` : '模式推估'}`] });
@@ -135,5 +144,5 @@ export function buildToday(now: Date, fc: Feed<Forecast>, air: Feed<Air>): Today
     { id: 'warnings', label: ['CWA warnings & earthquakes', '氣象署警特報與地震'], owner: '—', needs: 'free CWA API key' },
     { id: 'livebus', label: ['Live bus positions', '公車即時動態'], owner: '—', needs: 'free TDX API key' },
   ];
-  return { now: now.toISOString(), items, steady, slots, hourly, forecastMeta: fc.meta };
+  return { now: now.toISOString(), items, steady, slots, hourly, forecastMeta };
 }

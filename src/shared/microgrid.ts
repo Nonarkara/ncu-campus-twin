@@ -20,7 +20,7 @@ export function hourlyPvKw(installedKwp: number, ghiWm2: number | null): number 
 }
 
 export function todayPvKwh(installedKwp: number, hourly: HourlyPoint[]): number | null {
-  if (!hourly.length || hourly.every(h => h.ghi == null)) return null;
+  if (!hourly.length || hourly.some(h => h.ghi == null || !Number.isFinite(h.ghi))) return null;
   let sum = 0;
   for (const h of hourly) sum += hourlyPvKw(installedKwp, h.ghi);
   return Math.round(sum);
