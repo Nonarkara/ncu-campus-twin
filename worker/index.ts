@@ -190,7 +190,7 @@ async function today(url: URL, ctx: ExecutionContext): Promise<Response> {
     // 5-minute bucket in the key: a cached payload can never outlive its slot, whatever the cache does with max-age.
     // (Seen 2026-11-22: an edge served a 3.5 h old payload.) Bump v when the payload shape changes.
     const now = new Date();
-    const key = new Request(`${url.origin}/api/today?v=5&t=${Math.floor(now.getTime() / 300000)}`);
+    const key = new Request(`${url.origin}/api/today?v=6&t=${Math.floor(now.getTime() / 300000)}`);
     const hit = await cache.match(key);
     if (hit) return hit;
     const [fc, aq] = await Promise.all([forecast(now), air()]);

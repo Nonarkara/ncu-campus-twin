@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest';
-import { buildToday, taipei, upcoming, RULES, type Feed, type Forecast, type Air } from '../src/shared/today';
+import { buildToday, RULES, type Feed, type Forecast, type Air } from '../src/shared/today';
+import { routes, scheduledRows, serviceDay, taipei, upcoming, type Row } from '../src/shared/transit';
 
 const hours = (date: string) => Array.from({ length: 48 }, (_, i) => {
   const d = new Date(Date.parse(date + 'T00:00:00Z') + i * 3600e3); return d.toISOString().slice(0, 16); });
@@ -74,9 +75,34 @@ describe('Today engine', () => {
     expect(t.items.every(i => i.rule && i.owner)).toBe(true);
   });
 
-  it('weekday timetable filters weekend-only trips', () => {
-    const rows: [string, string, string, string][] = [['9025A', '07:00', '07:10', 'wkend'], ['9025A', '12:00', '12:13', 'wkday']];
-    expect(upcoming(rows, 2, '06:00', false).map(r => r[1])).toEqual(['12:00']);
-    expect(upcoming(rows, 2, '06:00', true).map(r => r[1])).toEqual(['07:00']);
+  it('uses the published break pattern on campus break weekdays', () => {
+    const rows: Row[] = [['132', '07:00', '07:20', 'wkday'], ['133', '07:40', '08:00', 'brk'], ['133', '07:45', '08:05', 'term'], ['132', '19:40', '20:00', 'wkend']];
+    expect(scheduledRows(rows, 'term').map(r => r[2])).toEqual(['07:20', '08:05']);
+    expect(scheduledRows(rows, 'break').map(r => r[2])).toEqual(['07:20', '08:00']);
+    expect(scheduledRows(rows, 'weekend').map(r => r[2])).toEqual(['08:00', '20:00']);
+  });
+
+  it.each([
+    ['2026-11-22T16:00:00Z', 'term'],
+    ['2026-12-25T01:00:00Z', 'unverified'],
+    ['2026-12-28T01:00:00Z', 'break'],
+    ['2027-02-14T16:00:00Z', 'term'],
+    ['2027-06-07T01:00:00Z', 'break'],
+    ['2027-08-02T01:00:00Z', 'unverified'],
+  ])('classifies Taipei service at %s as %s', (instant, day) => {
+    expect(serviceDay(taipei(new Date(instant)))).toBe(day);
+  });
+
+  it('withholds departure claims on unverified days in Today', () => {
+    const t = buildToday(new Date('2026-12-25T01:00:00Z'), fc(), air(10));
+    expect(t.steady.find(row => row.id === 'taipei')).toMatchObject({
+      value: ['Check operator timetable', '請查客運班表'], meta: { tier: 'unavailable' },
+    });
+  });
+
+  it('uses the NCU departure column and stops counting after the last trip', () => {
+    const { rows, col } = routes.toHSR;
+    expect(upcoming(rows, col, '17:59', 'term').at(-1)?.[col]).toBe('18:00');
+    expect(upcoming(rows, col, '18:01', 'term')).toEqual([]);
   });
 });

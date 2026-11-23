@@ -1,6 +1,6 @@
 import { Fragment, useEffect, useMemo, useRef, useState } from 'react';
 import type { Today, Meta } from './shared/today';
-import { runs, taipei, upcoming } from './shared/today';
+import { CHECK_OPERATOR, SERVICE_LABELS, routes, scheduledRows, serviceDay, taipei, upcoming } from './shared/transit';
 import {
   MICROGRID_LOI,
   annualCo2Tonnes,
@@ -8,7 +8,9 @@ import {
   todayPvKwh,
 } from './shared/microgrid';
 import {
+  BUILDING_IDENTITIES,
   CAMPUS_ANCHORS,
+  CAMPUS_MAP_SOURCE,
   LAB_PRESET_IDS,
   ON_CAMPUS_STOPS,
   SUBSTATION_ID,
@@ -20,6 +22,7 @@ import {
   type CampusData,
 } from './shared/campus';
 import timetable from '../data/timetable.json';
+import serviceCalendar from '../data/service-calendar.json';
 import { CampusMap, type Lens } from './CampusMap';
 import { TwinLens, type Eco, type Ndvi, type Layer } from './TwinLens';
 import { FindLens, type Directory } from './FindLens';
@@ -29,7 +32,6 @@ import { HeadwayStrip, HourlyStrip, IslandChart, type MetricKey } from './Charts
 import { NewsCorpusPanel, NewsTicker } from './NewsWire';
 
 type L = 'en' | 'zh';
-type Row = [string, string, string, string];
 
 const T = {
   today: ['Today', '今日'],
@@ -66,6 +68,20 @@ const MetaLine = ({ m, l }: { m: Meta; l: L }) => (
   <span className="nb">{m.source} · {l === 'en' ? m.tier : TIER[m.tier] ?? m.tier} · {age(m.asOf, l)}</span>
 );
 
+const OPERATOR_TIMETABLES = {
+  taipei: 'https://www.tpebus.com.tw/image/9025.pdf',
+  hsr: 'https://ebus.tycg.gov.tw/ebus/',
+  inbound: 'https://ebus.tycg.gov.tw/ebus/',
+};
+
+function revealInspector() {
+  if (window.innerWidth >= 900) return;
+  requestAnimationFrame(() => document.querySelector('.inspector')?.scrollIntoView({
+    block: 'start',
+    behavior: window.matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth',
+  }));
+}
+
 function fmtCountdown(mins: number, l: L) {
   if (mins <= 0) return l === 'en' ? 'now' : '即將到站';
   if (mins < 60) return l === 'en' ? `in ${mins}m` : `${mins} 分後`;
@@ -95,6 +111,9 @@ function BuildingInspector({
 }) {
   const p = building.properties;
   const anchor = CAMPUS_ANCHORS[p.id];
+  const identity = BUILDING_IDENTITIES.get(p.id);
+  const zh = identity?.zh ?? p.name;
+  const en = identity?.en ?? p.name_en;
   const center = polygonCentroid(building.geometry.coordinates[0]);
   const subFeat = campus.buildings.features.find(f => f.properties.id === SUBSTATION_ID);
   const subDist = subFeat && p.id !== SUBSTATION_ID
@@ -105,7 +124,7 @@ function BuildingInspector({
   const lowKwp = +(p.kwp * 0.5).toFixed(1);
   const co2 = p.kwh_yr > 0 ? annualCo2Tonnes(p.kwh_yr) : 0;
   const units = useMemo(
-    () => (dir ? dir.categories.flatMap(c => c.entries).filter(e => e.osm === p.id) : []),
+    () => (dir ? dir.categories.flatMap(c => c.entries).filter(e => e.osm === p.id && e.url !== CAMPUS_MAP_SOURCE.sourceUrl) : []),
     [dir, p.id],
   );
 
@@ -113,8 +132,8 @@ function BuildingInspector({
     <aside className="inspector" aria-label={l === 'en' ? 'Building dossier' : '建物資訊'}>
       <div className="insp-head">
         <div>
-          <strong>{(l === 'en' ? p.name_en ?? p.name : p.name) ?? (l === 'en' ? 'Unnamed building' : '未命名建物')}</strong>
-          {p.name && p.name_en && l === 'en' && <span className="subname"> {p.name}</span>}
+          <strong>{(l === 'en' ? en ?? zh : zh) ?? (l === 'en' ? 'Unnamed building' : '未命名建物')}</strong>
+          {zh && en && l === 'en' && <span className="subname"> {zh}</span>}
           {anchor && <span className="tag">{pick(anchor.tag, l)}</span>}
         </div>
         <button className="xbtn" onClick={onClose} aria-label={l === 'en' ? 'Close inspector' : '關閉'}>×</button>
@@ -130,13 +149,21 @@ function BuildingInspector({
                   {p.height_m} m{p.levels ? ` (${p.levels}F)` : ''}
                   <small>
                     {p.height_tier === 'observed'
-                      ? (l === 'en'
-                        ? `NLSC BUILD_H, H_SOURCE 0 = LiDAR DSM${p.height_mdate ? ` · ${p.height_mdate.slice(0, 4)}-${p.height_mdate.slice(4)}` : ''}${(p.nlsc_n ?? 1) > 1 ? ` · tallest of ${p.nlsc_n} roof sections (lowest ${p.nlsc_min} m)` : ''}`
-                        : `國土測繪 BUILD_H（H_SOURCE 0 = LiDAR DSM）${p.height_mdate ? `・${p.height_mdate.slice(0, 4)}-${p.height_mdate.slice(4)}` : ''}${(p.nlsc_n ?? 1) > 1 ? `・${p.nlsc_n} 個屋頂分區取最高（最低 ${p.nlsc_min} m）` : ''}`)
+                      ? (l === 'en' ? 'NLSC LiDAR' : '國土測繪光達')
+                        + (p.height_mdate ? ` · ${p.height_mdate.slice(0, 4)}-${p.height_mdate.slice(4)}` : '')
+                        + ((p.nlsc_n ?? 0) > 0
+                          ? (l === 'en' ? ` · ${p.nlsc_n} roof sections` : `・${p.nlsc_n} 個屋頂分區`)
+                            + ((p.nlsc_n ?? 0) > 1 ? ` · ${p.nlsc_min}–${p.height_m} m` : '')
+                          : '')
                       : (l === 'en' ? 'OSM floors × 3.5 m (modeled)' : 'OSM 樓層 × 3.5 m（模式）')}
                   </small>
                 </>
               : (l === 'en' ? 'height unknown (drawn flat)' : '無實測高度（維持平面）')}
+            {identity && <small>
+              <a href={CAMPUS_MAP_SOURCE.sourceUrl} target="_blank" rel="noopener noreferrer">
+                {l === 'en' ? 'NCU campus map' : '中大校園圖'} · {identity.grid} #{identity.number}{identity.code && ` · ${identity.code}`}
+              </a> · {CAMPUS_MAP_SOURCE.asOf}
+            </small>}
           </dd>
         </div>
         {p.kwp > 0 && (
@@ -163,7 +190,7 @@ function BuildingInspector({
         {nearStop && (
           <div>
             <dt>{l === 'en' ? 'Nearest bus stop' : '最近校內公車站'}</dt>
-            <dd>{nearStop.name} · {nearStop.distanceM} m (~{nearStop.walkMin} {l === 'en' ? 'min walk' : '分步行'})</dd>
+            <dd>{nearStop.name} · {nearStop.distanceM} m {l === 'en' ? 'straight-line' : '直線距離'}</dd>
           </div>
         )}
         {units.length > 0 && (
@@ -314,7 +341,9 @@ function TodayLens({
         {t.steady.map(s => (
           <li key={s.id}>
             <span>{pick(s.label, l)}</span> <b>{pick(s.value, l)}</b>
-            <small><MetaLine m={s.meta} l={l} /></small>
+            <small><MetaLine m={s.meta} l={l} />
+              {Object.hasOwn(OPERATOR_TIMETABLES, s.id) && <> · <a href={s.meta.tier === 'unavailable' ? OPERATOR_TIMETABLES[s.id as keyof typeof OPERATOR_TIMETABLES] : timetable.sourceUrl} target="_blank" rel="noopener noreferrer">{l === 'en' ? 'Timetable' : '班表'}</a></>}
+            </small>
           </li>
         ))}
         {mainRoad.length > 0 && live && (
@@ -540,27 +569,31 @@ function PowerLens({
 }
 
 function MoveLens({
+  clock,
   selectedStopName,
   onSelectStop,
   live,
   onFocusCoord,
   l,
 }: {
+  clock: ReturnType<typeof taipei>;
   selectedStopName: string | null;
   onSelectStop: (name: string) => void;
   live: Live | null;
   onFocusCoord: (coord: [number, number]) => void;
   l: L;
 }) {
-  const { hm, weekend } = taipei(new Date());
-  const tt = timetable as any;
-  const taipeiUp: Row[] = upcoming(tt.toTaipei.rows, 2, hm, weekend);
+  const { hm } = clock;
+  const day = serviceDay(clock);
+  const verified = day !== 'unverified';
+  const taipeiUp = upcoming(routes.toTaipei.rows, routes.toTaipei.col, hm, day);
   const nextTaipei = taipeiUp[0];
   const nextTaipeiMin = nextTaipei ? minutesUntil(hm, nextTaipei[2]) : null;
   const mainRoad = live?.road.data.filter(f => f.kind === 'main') ?? [];
 
-  const block = (k: 'toTaipei' | 'toHSR' | 'toCampus', col: 1 | 2, label: [string, string]) => {
-    const rows: Row[] = upcoming(tt[k].rows, col, hm, weekend).slice(0, 5);
+  const block = (k: keyof typeof routes, label: [string, string]) => {
+    const { rows: schedule, col } = routes[k];
+    const rows = upcoming(schedule, col, hm, day).slice(0, 5);
     const multi = new Set(rows.map(r => r[0])).size > 1;
     const firstMin = rows[0] ? minutesUntil(hm, rows[0][col]) : null;
     return (
@@ -572,35 +605,35 @@ function MoveLens({
         <b className="times">
           {rows.length
             ? rows.map((r, i) => <span key={i} className="t">{r[col]}{multi && <sub>{r[0]}</sub>}</span>)
-            : (l === 'en' ? 'none left today' : '今日已無班次')}
+            : (verified ? (l === 'en' ? 'none left in timetable' : '班表今日已無班次') : <a href={k === 'toTaipei' ? OPERATOR_TIMETABLES.taipei : OPERATOR_TIMETABLES.inbound} target="_blank" rel="noopener noreferrer">{pick(CHECK_OPERATOR, l)}</a>)}
         </b>
       </li>
     );
   };
 
-  const todayTimes = (rows: Row[], col: 1 | 2) =>
-    rows.filter(r => runs(r[3], weekend)).map(r => r[col]);
+  const todayTimes = ({ rows, col }: typeof routes[keyof typeof routes]) =>
+    scheduledRows(rows, day).map(r => r[col]);
 
   const tracks = [
-    { label: '9025A', times: todayTimes(tt.toTaipei.rows, 2), highlight: true },
-    { label: '172/173', times: todayTimes(tt.toHSR.rows, 1) },
-    { label: '132/133', times: todayTimes(tt.toCampus.rows, 2) },
+    { label: '9025A', times: todayTimes(routes.toTaipei), highlight: true },
+    { label: '172/173', times: todayTimes(routes.toHSR) },
+    { label: '132/133', times: todayTimes(routes.toCampus) },
   ];
 
-  const needTransfer = !nextTaipei || (nextTaipeiMin !== null && nextTaipeiMin > 90);
+  const needTransfer = verified && (!nextTaipei || (nextTaipeiMin !== null && nextTaipeiMin > 90));
 
   return (
     <>
       <div className="hero">
-        <b className={taipeiUp.length ? '' : 'act'}>{taipeiUp.length}</b>
+        <b className={verified && !taipeiUp.length ? 'act' : ''}>{verified ? taipeiUp.length : '—'}</b>
         <p>
-          {nextTaipei && nextTaipeiMin !== null
+          {!verified ? <a className="operator-link" href={OPERATOR_TIMETABLES.taipei} target="_blank" rel="noopener noreferrer">{pick(CHECK_OPERATOR, l)}</a> : nextTaipei && nextTaipeiMin !== null
             ? (l === 'en'
-              ? `9025A to Taipei left · next ${nextTaipei[2]} (${fmtCountdown(nextTaipeiMin, l)})`
-              : `班 9025A 往臺北・下班 ${nextTaipei[2]}（${fmtCountdown(nextTaipeiMin, l)}）`)
+              ? `9025A to Taipei scheduled · next ${nextTaipei[2]} (${fmtCountdown(nextTaipeiMin, l)})`
+              : `班 9025A 往臺北（班表）・下班 ${nextTaipei[2]}（${fmtCountdown(nextTaipeiMin, l)}）`)
             : (l === 'en'
-              ? 'No 9025A campus stops left today'
-              : '今日已無 9025A 繞駛中大班次')}
+              ? 'No more campus stops in the 9025A timetable'
+              : '9025A 班表今日已無繞駛中大班次')}
         </p>
       </div>
 
@@ -609,21 +642,21 @@ function MoveLens({
           <strong>{l === 'en' ? 'NCU transfer advice' : '中大轉乘建議'}</strong>
           <p>
             {l === 'en'
-              ? 'Take 132 / 133 to Youmin Hospital (佑民醫院) and transfer to main-line 9025. Parking: NT$30/h.'
-              : '請搭 132 / 133 至佑民醫院轉乘主線 9025 往臺北。校內臨停費率 NT$30/時。'}
+              ? 'Take 132 / 133 to Youmin Hospital (佑民醫院) and transfer to main-line 9025.'
+              : '請搭 132 / 133 至佑民醫院轉乘主線 9025 往臺北。'}
           </p>
         </div>
       )}
 
-      <div className="strip-box">
+      {verified && <div className="strip-box">
         <div className="strip-head">
-          <h2 className="h">{l === 'en' ? `Daily headway (${weekend ? 'weekend' : 'weekday'})` : `全日班距分布（${weekend ? '假日' : '平日'}）`}</h2>
+          <h2 className="h">{l === 'en' ? 'Daily headway' : '全日班距分布'} · {pick(SERVICE_LABELS[day], l)}</h2>
           <span className="meta">{hm} TPE</span>
         </div>
         <HeadwayStrip nowHm={hm} tracks={tracks} l={l} />
-      </div>
+      </div>}
 
-      <h2 className="h">{l === 'en' ? 'On-campus stops (300 m catchment)' : '校內公車站（點選顯示 300 m 步行圈）'}</h2>
+      <h2 className="h">{l === 'en' ? 'On-campus stops (300 m radius)' : '校內公車站（顯示 300 m 半徑）'}</h2>
       <div className="stops-grid">
         {ON_CAMPUS_STOPS.map(name => (
           <button
@@ -638,9 +671,9 @@ function MoveLens({
       </div>
 
       <ul className="steady">
-        {block('toTaipei', 2, ['9025A → Taipei, at NCU stop', '9025A 往臺北，中大站約'])}
-        {block('toHSR', 1, ['172 / 173 → HSR Taoyuan', '172 / 173 往高鐵桃園站'])}
-        {block('toCampus', 2, ['132 / 133 Zhongli → NCU', '132 / 133 中壢 → 中大'])}
+        {block('toTaipei', ['9025A → Taipei, at NCU stop', '9025A 往臺北，中大站約'])}
+        {block('toHSR', ['172 / 173 → HSR Taoyuan', '172 / 173 往高鐵桃園站'])}
+        {block('toCampus', ['132 / 133 Zhongli → NCU', '132 / 133 中壢 → 中大'])}
         {mainRoad.length > 0 && live && (
           <li>
             <span>{l === 'en' ? 'Freeway 1 (9025A corridor)' : '國道 1 號（9025A 路廊）'}</span>
@@ -677,9 +710,9 @@ function MoveLens({
       </ul>
 
       <p className="note">
-        {l === 'en'
-          ? <>{weekend ? 'Weekend' : 'Weekday'} schedule. {tt.caveats.join(' ')} {tt.source}.</>
-          : <>{weekend ? '假日' : '平日'}班表。中大站時間為客運預估，即時位置需 TDX。資料：中大總務處事務組對外交通資訊（115.02.26）。</>}
+        {l === 'en' ? 'Campus stop times are scheduled estimates.' : '中大站時間為班表預估。'}{' '}
+        <a href={timetable.sourceUrl} target="_blank" rel="noopener noreferrer">{l === 'en' ? 'NCU timetable' : '中大班表'} · {timetable.asOf}</a>
+        {' · '}<a href={serviceCalendar.sourceUrl} target="_blank" rel="noopener noreferrer">{l === 'en' ? 'Academic calendar' : '校曆'}</a>
       </p>
     </>
   );
@@ -713,11 +746,16 @@ export function App() {
     const load = async () => {
       if (document.hidden) return;
       const [road, yb, nw] = await Promise.allSettled([
-        fetch('/api/live').then(r => r.json() as Promise<Pick<Live, 'road'>>),
+        fetch('/api/live').then(async r => {
+          if (!r.ok) throw new Error('Freeway feed unavailable');
+          const body = await r.json() as Pick<Live, 'road'>;
+          if (!Array.isArray(body.road?.data) || !body.road.meta) throw new Error('Invalid freeway feed');
+          return body;
+        }),
         fetch('https://apis.youbike.com.tw/json/station-yb2.json').then(r => r.json() as Promise<any[]>),
         fetch('/api/news').then(r => r.json() as Promise<NewsPayload>),
       ]);
-      const docks = yb.status === 'fulfilled' ? parseYouBike(yb.value) : [];
+      const docks = yb.status === 'fulfilled' && Array.isArray(yb.value) ? parseYouBike(yb.value) : [];
       setLive({
         road: road.status === 'fulfilled' ? road.value.road : { data: [], meta: { source: 'Freeway Bureau VD (MOTC)', tier: 'unavailable', asOf: null } },
         docks: { data: docks, meta: { source: 'YouBike 2.0 station feed', tier: docks.length ? 'live' : 'unavailable', asOf: docks.map(d => d.at).sort().at(-1) ?? null } },
@@ -749,7 +787,7 @@ export function App() {
   useEffect(() => {
     const loadToday = () =>
       fetch('/api/today', { cache: 'no-cache' })
-        .then(r => r.json() as Promise<Today>)
+        .then(r => { if (!r.ok) throw new Error('Today feed unavailable'); return r.json() as Promise<Today>; })
         .then(j => { setToday({ ...j, hourly: j.hourly ?? [], slots: j.slots ?? [], steady: j.steady ?? [], items: j.items ?? [] }); setTodayErr(false); }) // a browser-cached older payload may lack newer fields
         .catch(() => setTodayErr(true));
     loadToday();
@@ -766,7 +804,7 @@ export function App() {
   useEffect(() => {
     if (!selectedBuildingId || !inspectFromMap.current) return;
     inspectFromMap.current = false;
-    if (window.innerWidth < 900) requestAnimationFrame(() => document.querySelector('.inspector')?.scrollIntoView({ block: 'start', behavior: window.matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth' }));
+    revealInspector();
   }, [selectedBuildingId]);
   const shownForLayers = useRef(false); // first layer toggle on phone reveals the map once, later ones don't yank the page
   const showMap = () => { if (window.innerWidth < 900) document.getElementById('map')?.scrollIntoView({ behavior: window.matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth' }); };
@@ -809,7 +847,8 @@ export function App() {
       .filter(f => {
         const n = (f.properties.name ?? '').toLowerCase();
         const en = (f.properties.name_en ?? '').toLowerCase();
-        return n.includes(q) || en.includes(q);
+        const identity = BUILDING_IDENTITIES.get(f.properties.id);
+        return n.includes(q) || en.includes(q) || !!identity && (identity.zh.includes(q) || identity.en.toLowerCase().includes(q));
       })
       .slice(0, 6);
   }, [query, campus]);
@@ -855,7 +894,7 @@ export function App() {
             {searchHits.map(f => (
               <li key={f.properties.id}>
                 <button onClick={() => focusBuilding(f.properties.id)}>
-                  <span>{f.properties.name}{f.properties.name_en ? ` · ${f.properties.name_en}` : ''}</span>
+                  <span>{f.properties.name}{(BUILDING_IDENTITIES.get(f.properties.id)?.en ?? f.properties.name_en) && ` · ${BUILDING_IDENTITIES.get(f.properties.id)?.en ?? f.properties.name_en}`}</span>
                   <small>{f.properties.area_m2} m²{f.properties.kwp ? ` · ${Math.round(f.properties.kwp)} kWp` : ''}</small>
                 </button>
               </li>
@@ -906,6 +945,7 @@ export function App() {
         )}
         {lens === 'move' && (
           <MoveLens
+            clock={clock}
             selectedStopName={selectedStopName}
             onSelectStop={focusStop}
             live={live}
@@ -928,7 +968,11 @@ export function App() {
           l={l}
           campus={campus}
           selectedBuildingId={selectedBuildingId}
-          onSelectBuilding={id => { inspectFromMap.current = true; focusBuilding(id); }}
+          onSelectBuilding={id => {
+            if (id === selectedBuildingId) revealInspector();
+            else inspectFromMap.current = true;
+            focusBuilding(id);
+          }}
           portfolioIds={portfolioIds}
           selectedStopName={selectedStopName}
           onSelectStop={focusStop}

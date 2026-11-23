@@ -463,7 +463,7 @@ export function CampusMap({
       (m.getSource('radials') as GeoJSONSource | undefined)?.setData(EMPTY_FC);
     }
 
-    // 300 m walking catchment around selected bus stop (Move lens)
+    // 300 m radius around selected bus stop (Move lens)
     if (lens === 'move' && selectedStopName) {
       const stopFeat = campus.stops.features.find(f => f.properties.name === selectedStopName);
       if (stopFeat) {
@@ -577,7 +577,7 @@ export function CampusMap({
   } else if (lens === 'move') {
     legend = selectedStopName
       ? (l === 'en' ? `${selectedStopName} · dashed ring = 300 m (~4 min walk)` : `${selectedStopName} · 虛線圓 = 300 公尺（步行約 4 分）`)
-      : (l === 'en' ? 'Click an on-campus stop (white dot) for 300 m walk catchment' : '點選校內白點公車站檢視 300 m 步行圈');
+      : (l === 'en' ? 'Select an on-campus stop (white dot) to show a 300 m radius' : '選擇校內白點公車站以顯示 300 m 半徑');
   } else {
     legend = l === 'en'
       ? 'Select any building for its dossier: height, solar, substation, transit · dashed = OSM boundary'

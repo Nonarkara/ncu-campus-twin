@@ -1,6 +1,7 @@
 // The Today engine: turns cooked feeds into a short list of decisions.
 // Pure function, no I/O — the worker fetches, this decides. Every threshold is named with its source.
 import timetable from '../../data/timetable.json';
+import { CHECK_OPERATOR, routes, serviceDay, taipei, upcoming } from './transit';
 
 export type Tier = 'live' | 'forecast' | 'modeled' | 'schedule' | 'unavailable';
 export interface Meta { source: string; tier: Tier; asOf: string | null }
@@ -34,30 +35,12 @@ export const RULES = {
   pm25: { ug: 35.5, src: 'MOENV AQI orange band: PM2.5 ≥35.5 µg/m³' },
 };
 
-/** Taipei wall-clock parts for an instant (UTC+8, no DST). */
-export function taipei(d: Date) {
-  const t = new Date(d.getTime() + 8 * 3600e3);
-  const dow = t.getUTCDay();
-  return { date: t.toISOString().slice(0, 10), hm: t.toISOString().slice(11, 16), dow, weekend: dow === 0 || dow === 6 };
-}
-
-type Row = [string, string, string, string];
-/** Which timetable day-codes run today. Break periods are not modelled: weekdays count as term ('term'). */
-export function runs(code: string, weekend: boolean) {
-  if (code === 'daily') return true;
-  if (code === 'wkday' || code === 'term') return !weekend;
-  if (code === 'wkend' || code === 'brk') return weekend;
-  return false;
-}
-export function upcoming(rows: Row[], col: 1 | 2, hm: string, weekend: boolean) {
-  return rows.filter(r => runs(r[3], weekend) && r[col] > hm).sort((a, b) => a[col].localeCompare(b[col]));
-}
-
 const fmtH = (iso: string) => iso.slice(11, 16);
 const isReading = (n: unknown): n is number => typeof n === 'number' && Number.isFinite(n);
 
 export function buildToday(now: Date, fc: Feed<Forecast>, air: Feed<Air>): Today {
-  const { date, hm, weekend } = taipei(now);
+  const clock = taipei(now);
+  const { date, hm } = clock;
   const items: Item[] = [];
   const steady: Steady[] = [];
   const hourly: HourlyPoint[] = [];
@@ -121,17 +104,18 @@ export function buildToday(now: Date, fc: Feed<Forecast>, air: Feed<Air>): Today
     steady.push({ id: 'air', label: ['Air, PM2.5', '空品 PM2.5'], meta: air.meta, value: [`${air.data.pm25.toFixed(0)} µg/m³ · ${air.data.n ? `median of ${air.data.n} sensors` : 'model estimate'}`, `${air.data.pm25.toFixed(0)} µg/m³ · ${air.data.n ? `${air.data.n} 個感測器中位數` : '模式推估'}`] });
   }
 
-  const tt = timetable as unknown as Record<'toCampus' | 'toHSR' | 'toTaipei', { rows: Row[] }>;
-  const sched: Meta = { source: 'NCU 總務處 timetable', tier: 'schedule', asOf: '2026-02-26' };
-  const taipeiLeft = upcoming(tt.toTaipei.rows, 2, hm, weekend);
-  const hsr = upcoming(tt.toHSR.rows, 1, hm, weekend);
-  const inbound = upcoming(tt.toCampus.rows, 2, hm, weekend);
+  const day = serviceDay(clock);
+  const sched: Meta = { source: 'NCU 總務處 timetable', tier: day === 'unverified' ? 'unavailable' : 'schedule', asOf: timetable.asOf };
+  const taipeiLeft = upcoming(routes.toTaipei.rows, routes.toTaipei.col, hm, day);
+  const hsr = upcoming(routes.toHSR.rows, routes.toHSR.col, hm, day);
+  const inbound = upcoming(routes.toCampus.rows, routes.toCampus.col, hm, day);
+  const noTrips: [string, string] = day === 'unverified' ? [...CHECK_OPERATOR] : ['none left in timetable', '班表今日已無班次'];
   steady.push({ id: 'taipei', label: ['9025A to Taipei', '9025A 往臺北'], meta: sched,
-    value: taipeiLeft.length ? [`~${taipeiLeft[0][2]} at stop · ${taipeiLeft.length} left today`, `約 ${taipeiLeft[0][2]} 到站 · 今日剩 ${taipeiLeft.length} 班`] : ['none left today', '今日已無班次'] });
+    value: taipeiLeft.length ? [`~${taipeiLeft[0][2]} at stop · ${taipeiLeft.length} scheduled`, `約 ${taipeiLeft[0][2]} 到站 · 班表剩 ${taipeiLeft.length} 班`] : noTrips });
   steady.push({ id: 'hsr', label: ['To HSR Taoyuan', '往高鐵桃園站'], meta: sched,
-    value: hsr.length ? [`${hsr[0][0]} ${hsr[0][1]} · last ${hsr.at(-1)![1]}`, `${hsr[0][0]} ${hsr[0][1]} · 末班 ${hsr.at(-1)![1]}`] : ['none left today', '今日已無班次'] });
-  steady.push({ id: 'inbound', label: ['Last bus in from Zhongli', '中壢末班進校'], meta: sched,
-    value: inbound.length ? [`${inbound.at(-1)![0]} ~${inbound.at(-1)![2]}`, `${inbound.at(-1)![0]} 約 ${inbound.at(-1)![2]}`] : ['none left today', '今日已無班次'] });
+    value: hsr.length ? [`${hsr[0][0]} ${hsr[0][1]} · last scheduled ${hsr.at(-1)![1]}`, `${hsr[0][0]} ${hsr[0][1]} · 班表末班 ${hsr.at(-1)![1]}`] : noTrips });
+  steady.push({ id: 'inbound', label: ['Last scheduled bus in from Zhongli', '班表中壢末班進校'], meta: sched,
+    value: inbound.length ? [`${inbound.at(-1)![0]} ~${inbound.at(-1)![2]}`, `${inbound.at(-1)![0]} 約 ${inbound.at(-1)![2]}`] : noTrips });
 
   const order = { act: 0, watch: 1 } as const;
   items.sort((a, b) => order[a.level] - order[b.level] || (a.by ?? '99').localeCompare(b.by ?? '99'));

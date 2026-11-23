@@ -1,5 +1,10 @@
+import crosswalk from '../../data/campus-crosswalk.json';
+
 // Spatial geometry & verified OSM campus anchor definitions.
 // Every coordinate is derived directly from OSM polygons in public/data/campus.json.
+
+export const CAMPUS_MAP_SOURCE = crosswalk;
+export const BUILDING_IDENTITIES = new Map(crosswalk.buildings.map(b => [b.id, b]));
 
 export interface BuildingProps {
   id: string;
@@ -139,13 +144,13 @@ export function haversineMeters(a: [number, number], b: [number, number]): numbe
 export function nearestOnCampusStop(
   coord: [number, number],
   stops: StopFeature[],
-): { name: string; distanceM: number; walkMin: number } | null {
-  let best: { name: string; distanceM: number; walkMin: number } | null = null;
+): { name: string; distanceM: number } | null {
+  let best: { name: string; distanceM: number } | null = null;
   for (const s of stops) {
     if (!s.properties.name || !(ON_CAMPUS_STOPS as readonly string[]).includes(s.properties.name)) continue;
     const d = haversineMeters(coord, s.geometry.coordinates);
     if (!best || d < best.distanceM) {
-      best = { name: s.properties.name, distanceM: d, walkMin: Math.max(1, Math.round(d / 75)) };
+      best = { name: s.properties.name, distanceM: d };
     }
   }
   return best;

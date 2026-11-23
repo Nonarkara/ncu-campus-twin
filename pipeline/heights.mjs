@@ -96,7 +96,9 @@ if (process.argv.includes('--cached')) {
   await matchAndWrite(JSON.parse(await readFile(RAW, 'utf8')).buildings);
   process.exit(0);
 }
-const root = await (await fetch(BASE + 'tileset.json', { signal: AbortSignal.timeout(20000) })).json();
+const response = await fetch(BASE + 'tileset.json', { signal: AbortSignal.timeout(30000) });
+if (!response.ok) throw new Error(`NLSC tileset HTTP ${response.status}`);
+const root = await response.json();
 const leafUris = [];
 function walk(node) {
   const s = node.boundingVolume?.sphere;
@@ -118,13 +120,14 @@ console.log(`Traversing ${leafUris.length} NLSC leaf tiles around NCU...`);
 
 const byId = new Map();
 const CONC = 10;
+const failed = [];
 let idx = 0;
 async function worker() {
   while (idx < leafUris.length) {
     const uri = leafUris[idx++];
     try {
       const r = await fetch(BASE + uri, { signal: AbortSignal.timeout(20000) });
-      if (!r.ok) continue;
+      if (!r.ok) throw new Error(`HTTP ${r.status}`);
       const rows = decodeGlbMetadata(Buffer.from(await r.arrayBuffer()));
       for (const row of rows) {
         const h = Number(row.BUILD_H);
@@ -148,10 +151,14 @@ async function worker() {
           });
         }
       }
-    } catch { /* skip transient tile error */ }
+    } catch (err) { failed.push(`${uri}: ${err.message}`); }
   }
 }
 await Promise.all(Array.from({ length: CONC }, worker));
+
+if (failed.length || !byId.size) {
+  throw new Error(`Incomplete NLSC harvest: ${failed.length} failed tiles, ${byId.size} building records. ${failed.slice(0, 3).join(', ')}`);
+}
 
 const nlscBuildings = [...byId.values()];
 await mkdir(join(ROOT, 'var/raw/heights/nlsc'), { recursive: true });

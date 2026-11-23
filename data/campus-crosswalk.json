@@ -1,0 +1,13 @@
+{
+  "version": 1,
+  "source": "NCU Campus Guide Map",
+  "sourceUrl": "https://mandarin.lc.ncu.edu.tw/userfiles/files/20250117033401329.pdf",
+  "asOf": "2023-04-24",
+  "buildings": [
+    { "id": "way/202805788", "zh": "學生女十四舍", "en": "Female Dorm #14", "number": 84, "grid": "C1", "code": null },
+    { "id": "way/268824432", "zh": "學生男六舍", "en": "Male Dorm #6", "number": 74, "grid": "C1", "code": null },
+    { "id": "way/202806573", "zh": "總圖書館", "en": "Main Library", "number": 2, "grid": "C2", "code": "L2" },
+    { "id": "way/202690841", "zh": "國鼎光電大樓", "en": "Kwoh-Ting Optics and Photonics Building", "number": 21, "grid": "C4", "code": "IL" },
+    { "id": "way/217833430", "zh": "太空及遙測研究中心", "en": "Center for Space & Remote Sensing Research", "number": 36, "grid": "A4", "code": "R2" }
+  ]
+}

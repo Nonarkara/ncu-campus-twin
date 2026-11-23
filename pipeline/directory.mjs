@@ -3,6 +3,7 @@
 import { readFile, writeFile } from 'node:fs/promises';
 import { tels } from './tels.mjs';
 const dir = JSON.parse(await readFile(new URL('../var/raw/directory/directory.json', import.meta.url), 'utf8'));
+const crosswalk = JSON.parse(await readFile(new URL('../data/campus-crosswalk.json', import.meta.url), 'utf8'));
 const campus = JSON.parse(await readFile(new URL('../public/data/campus.json', import.meta.url), 'utf8'));
 const byName = new Map();
 for (const b of campus.buildings.features) if (b.properties.name) byName.set(b.properties.name.trim(), b.properties.id);
@@ -13,6 +14,12 @@ const ALIAS = {
   '學生女三舍': '女三舍', '學生女四舍': '女四舍', '學生女十四舍': '女十四舍', '教職員單一舍': '單一舍', '教職員單二舍': '單二舍',
   '教職員單四舍': '單四舍', '桃園市中大國民運動中心': '中大國民運動中心', '科學二館': '科學二館(理學院大樓)',
 };
+const facilities = dir.categories.find(c => c.key === 'facility').entries;
+for (const identity of crosswalk.buildings) {
+  if (dir.categories.some(c => c.entries.some(e => byName.get(ALIAS[e.building] ?? e.building) === identity.id))) continue;
+  const building = campus.buildings.features.find(f => f.properties.id === identity.id);
+  if (building) facilities.push({ zh: identity.zh, en: identity.en, url: crosswalk.sourceUrl, building: building.properties.name });
+}
 let linked = 0, dropped = 0, labelled = 0;
 const categories = dir.categories.map(c => ({ key: c.key, entries: c.entries.filter(e => {
   const ok = (e.zh || e.en) && /^https?:\/\//.test(e.url ?? ''); if (!ok) dropped++; return ok;

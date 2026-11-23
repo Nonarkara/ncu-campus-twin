@@ -59,7 +59,8 @@ button { cursor: pointer; }
 .kv > div { display: contents; }
 .kv dt, .kv dd { padding: 4px 0; border-top: 1px solid var(--line); }
 .kv dt { color: var(--dim); }
-.kv dd small { display: block; color: var(--dim); }
+.kv dd small { display: block; color: var(--dim); font-size: inherit; }
+.kv dd small a, .steady small a, .steady .times a, .hero p a { color: inherit; }
 .insp-units a { color: var(--ink); text-decoration: none; border-bottom: 1px solid var(--line-hi); }
 .insp-units a:hover { border-bottom-color: var(--amber); }
 .inline-jump { display: inline; padding: 0; font: inherit; color: inherit; border-bottom: 1px dotted var(--line-hi); }
@@ -104,6 +105,7 @@ button { cursor: pointer; }
 .hero b { font-size: var(--t-hero); font-weight: 500; line-height: 1; white-space: nowrap; }
 .hero b.act { color: var(--amber); }
 .hero p { color: var(--dim); }
+.operator-link { display: inline-flex; align-items: center; min-height: 44px; }
 
 .items { list-style: none; padding: 0; }
 .item { padding: 10px 0; border-top: 1px solid var(--line); }
