@@ -1,4 +1,5 @@
 import { afterEach, expect, it, vi } from 'vitest';
+import pkg from '../package.json';
 import worker from '../worker/index';
 import type { Today } from '../src/shared/today';
 
@@ -43,7 +44,39 @@ it('reports live vs degraded operational loops on /api/health', async () => {
 
   expect(res.status).toBe(200);
   expect(body.status).toBe('ok');
+  expect(body.version).toBe(pkg.version);
+  expect(typeof body.build).toBe('string');
+  expect(body.build.length).toBeGreaterThan(0);
+  expect(body.edgeCronNote).toContain('tisvcloud');
   expect(body.loops.road).toMatchObject({ tier: 'live', detectors: 1 });
   expect(body.loops.news).toMatchObject({ tier: 'live', articles: 2 });
   expect(res.headers.get('cache-control')).toBe('no-store');
+});
+
+it('returns explicit 404 for unknown API and non-asset paths while serving /', async () => {
+  const env = {
+    ASSETS: {
+      fetch: vi.fn(async (req: Request) => {
+        const path = new URL(req.url).pathname;
+        if (path === '/') return new Response('<!doctype html>', { status: 200, headers: { 'content-type': 'text/html' } });
+        return new Response('missing', { status: 404 });
+      }),
+    },
+  } as unknown as Parameters<typeof worker.fetch>[1];
+  const ctx = { waitUntil: vi.fn() } as unknown as ExecutionContext;
+
+  const rootRes = await worker.fetch(new Request('https://ncu.example/'), env, ctx);
+  expect(rootRes.status).toBe(200);
+  expect(rootRes.headers.get('x-content-type-options')).toBe('nosniff');
+
+  const nopeRes = await worker.fetch(new Request('https://ncu.example/nope'), env, ctx);
+  expect(nopeRes.status).toBe(404);
+  expect(await nopeRes.text()).toBe('Not found');
+  expect(nopeRes.headers.get('cache-control')).toBe('no-store');
+  expect(nopeRes.headers.get('x-frame-options')).toBe('DENY');
+
+  const apiNopeRes = await worker.fetch(new Request('https://ncu.example/api/nope'), env, ctx);
+  expect(apiNopeRes.status).toBe(404);
+  expect(await apiNopeRes.json()).toEqual({ error: 'Not found' });
+  expect(apiNopeRes.headers.get('cache-control')).toBe('no-store');
 });
