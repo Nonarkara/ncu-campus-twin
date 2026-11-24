@@ -998,7 +998,7 @@ export function App() {
               value={query}
               onChange={e => setQuery(e.target.value)}
               onKeyDown={e => { if (e.key === 'Escape') setQuery(''); }}
-              placeholder={l === 'en' ? 'Find building…' : '搜尋建物…'}
+              placeholder={l === 'en' ? 'Jump to building…' : '快速跳至建物…'}
               aria-label={l === 'en' ? 'Find campus building' : '搜尋校內建物'}
             />
           </div>

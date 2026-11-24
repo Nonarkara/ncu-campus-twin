@@ -41,17 +41,19 @@ const tone = (dark: string, light: string): ExpressionSpecification =>
 const GROUND = tone('#0a0e14', '#f7f5ef');
 const INK = tone('#e6edf3', '#202b33');
 const DIM = tone('#9aa7b4', '#505d66');
-const AMBER = tone('#f59e0b', '#884b00');
-const ink = (opacity: number) => tone(`rgba(230,237,243,${opacity})`, `rgba(32,43,51,${opacity})`);
-const amber = (opacity: number) => tone(`rgba(245,158,11,${opacity})`, `rgba(136,75,0,${opacity})`);
-const HEIGHT_RAMP = [4, tone('#394552', '#d7e0e4'), 18, tone('#6e7e8f', '#98acb8'), 42, tone('#c8d2dc', '#45667c')] as const;
+const AMBER = tone('#f59e0b', '#a84e00');
+const ink = (opacity: number) => tone(`rgba(230,237,243,${opacity})`, `rgba(26,36,44,${opacity})`);
+const tyrian = (opacity: number) => tone(`rgba(91,160,204,${opacity})`, `rgba(18,53,78,${opacity})`);
+const amber = (opacity: number) => tone(`rgba(245,158,11,${opacity})`, `rgba(168,78,0,${opacity})`);
+const HEIGHT_RAMP = [4, tone('#24384a', '#dce5ec'), 18, tone('#4c7494', '#63849c'), 42, tone('#b6d0e4', '#12354e')] as const;
 const ndviPaint = (view: VegetationView): ExpressionSpecification => {
   const shift: ExpressionSpecification = view === 'repeat'
     ? ['coalesce', ['get', 'repeated'], 'masked']
     : ['coalesce', ['get', 'shift'], ['case', ['<=', ['get', 'd'], -0.15], 'lower', ['>=', ['get', 'd'], 0.15], 'higher', 'other']];
-  const other: ExpressionSpecification = view === 'repeat' ? ink(0.08)
-    : ['interpolate', ['linear'], ['get', 'v'], 0.1, ink(0), 0.4, ink(0.10), 0.8, ink(0.32)];
-  return ['match', shift, 'lower', amber(0.60), 'higher', ink(0.50), 'masked', ink(0), other];
+  // Never smear unchanged cells into a gray graph-paper checkerboard in repeat mode; highlight only verified change.
+  const other: ExpressionSpecification = view === 'repeat' ? ink(0)
+    : ['interpolate', ['linear'], ['get', 'v'], 0.1, ink(0), 0.4, tyrian(0.10), 0.8, tyrian(0.28)];
+  return ['match', shift, 'lower', amber(0.68), 'higher', tyrian(0.58), 'masked', ink(0), other];
 };
 
 const EMPTY_FC = { type: 'FeatureCollection' as const, features: [] };
@@ -218,9 +220,9 @@ export function CampusMap({
       m.addLayer({ id: 'ndvi', type: 'fill', source: 'ndvi', layout: { visibility: 'none' }, paint: {
         'fill-color': ndviPaint('latest') } });
       m.addLayer({ id: 'water-area', type: 'fill', source: 'water', filter: ['==', ['geometry-type'], 'Polygon'], layout: { visibility: 'none' },
-        paint: { 'fill-color': ink(0.22), 'fill-outline-color': ink(0.7) } });
+        paint: { 'fill-color': tyrian(0.16), 'fill-outline-color': tyrian(0.42) } });
       m.addLayer({ id: 'water-line', type: 'line', source: 'water', filter: ['==', ['geometry-type'], 'LineString'], layout: { visibility: 'none' },
-        paint: { 'line-color': ink(0.75), 'line-width': ['match', ['get', 'k'], 'river', 3, 'canal', 2, 'stream', 1.5, 1],
+        paint: { 'line-color': tyrian(0.62), 'line-width': ['match', ['get', 'k'], 'river', 2.8, 'canal', 1.8, 'stream', 1.4, 1],
           'line-dasharray': ['match', ['get', 'k'], ['drain', 'ditch'], ['literal', [2, 1.5]], ['literal', [1, 0]]] } });
 
       m.addLayer({ id: 'bld', type: 'fill', source: 'bld', paint: { 'fill-color': ink(0.14) } });
@@ -647,9 +649,9 @@ export function CampusMap({
     const overlay = twin.layers.has('green') && twin.ndvi;
     legend = overlay
       ? (twin.vegetationView === 'repeat'
-        ? (l === 'en' ? 'Both 2026 passes · amber ↓ lower NDVI · strong ink ↑ higher · gaps masked' : '兩次 2026 年影像・琥珀 ↓ NDVI 下降・高對比 ↑ 上升・空白為遮罩')
-        : (l === 'en' ? 'Latest pass · amber ↓ lower NDVI · strong ink ↑ higher · faint fill = other' : '最新影像・琥珀 ↓ NDVI 下降・高對比 ↑ 上升・淡色為其他'))
-      : (l === 'en' ? '3D heights: NLSC surveys or modeled OSM levels · drag to rotate' : '立體高度：國土測繪實測或 OSM 樓層估算・拖曳旋轉');
+        ? (l === 'en' ? 'Repeat 2026 NDVI · amber ↓ lower · blue ↑ higher · ○ YouBike · ● NbS' : '2026 重複變化・琥珀 ↓ 下降・藍 ↑ 上升・○ YouBike・● 自然解方')
+        : (l === 'en' ? 'Latest NDVI · amber ↓ lower · blue ↑ higher · ○ YouBike · ● NbS' : '最新影像・琥珀 ↓ 下降・藍 ↑ 上升・○ YouBike・● 自然解方'))
+      : (l === 'en' ? '3D NLSC Tyrian ramp · ○ YouBike · ● NbS · drag to rotate' : '3D 國土測繪光達・○ YouBike・● 自然解方・拖曳旋轉');
   } else if (lens === 'move') {
     legend = selectedStopName
       ? (l === 'en' ? `${selectedStopName} · dashed ring = 300 m straight-line radius` : `${selectedStopName} · 虛線圓 = 直線半徑 300 公尺`)

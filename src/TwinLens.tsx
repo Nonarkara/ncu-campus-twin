@@ -152,90 +152,111 @@ export function TwinLens({ eco, ndvi, vegetationView, onVegetationView, live, ca
       )}
       <a className="tomap" href="#map">{l === 'en' ? 'Show campus map ↓' : '查看校園地圖 ↓'}</a>
 
-      <ul className="steady">
-        {main.length > 0 && live && (
-          <li>
-            <span>{l === 'en' ? 'Freeway 1 at Zhongli exit' : '國道 1 號・中壢交流道'}</span>
-            <b>{main.map((f, i) => (
-              <Fragment key={f.id}>
-                {i > 0 && ' · '}
-                <button className={`inline-jump ${f.speed !== null && f.speed < SLOW_KMH ? 'act' : ''}`}
-                  onClick={() => onFocusCoord?.([f.lon, f.lat])}>
-                  {f.dir === 'S' ? (l === 'en' ? 'S ' : '南 ') : (l === 'en' ? 'N ' : '北 ')}{f.speed ?? '—'}
-                </button>
-              </Fragment>))} km/h</b>
-            <small><M m={live.road.meta} l={l} /></small>
-          </li>
-        )}
-        {exits.length > 0 && live && (
-          <li>
-            <span>{l === 'en' ? 'Zhongli exit ramps' : '中壢出口匝道'}</span>
-            <b>{exits.map((f, i) => (
-              <Fragment key={f.id}>
-                {i > 0 && ' + '}
-                <button className="inline-jump" onClick={() => onFocusCoord?.([f.lon, f.lat])}>
-                  {n0(Math.round(f.vph / 60))}
-                </button>
-              </Fragment>))} {l === 'en' ? 'veh/min' : '輛/分'}</b>
-            <small><M m={live.road.meta} l={l} /> · {l === 'en' ? 'counted over the last minute; serves all of Zhongli' : '最近一分鐘計數；服務整個中壢'}</small>
-          </li>
-        )}
-        {live && live.docks.data.length > 0 && (
-          <li>
-            <span>{l === 'en' ? 'YouBike bikes / docks' : 'YouBike 車輛／車柱'}</span>
-            <b>{live.docks.data.map((d, i) => (
-              <Fragment key={d.id}>
-                {i > 0 && ' · '}
-                <button className={`inline-jump ${d.bikes <= 2 ? 'act' : ''}`} onClick={() => onFocusCoord?.([d.lon, d.lat])}>
-                  {l === 'en' ? DOCK_EN[d.id] ?? d.en : d.zh.replace('中央大學', '')} {d.bikes}/{d.capacity}
-                </button>
-              </Fragment>))}</b>
-            <small><M m={live.docks.meta} l={l} /></small>
-          </li>
+      {(main.length > 0 || exits.length > 0 || (live && live.docks.data.length > 0)) && live && (
+        <>
+          <h2 className="h">{l === 'en' ? 'Live sensors (click to focus)' : '即時感測（點選定位）'}</h2>
+          <div className="kpi-grid">
+            {main.length > 0 && (
+              <div className="kpi">
+                <span className="kpi-lbl">{l === 'en' ? 'Freeway 1 · Zhongli IC' : '國道 1 號・中壢'}</span>
+                <div className="kpi-val">
+                  {main.map((f, i) => (
+                    <Fragment key={f.id}>
+                      {i > 0 && ' · '}
+                      <button className={`inline-jump ${f.speed !== null && f.speed < SLOW_KMH ? 'act' : ''}`}
+                        onClick={() => onFocusCoord?.([f.lon, f.lat])}>
+                        {f.dir === 'S' ? (l === 'en' ? 'S ' : '南 ') : (l === 'en' ? 'N ' : '北 ')}{f.speed ?? '—'}
+                      </button>
+                    </Fragment>
+                  ))} <small className="kpi-meta">km/h</small>
+                </div>
+                <span className="kpi-meta"><M m={live.road.meta} l={l} /></span>
+              </div>
+            )}
+            {exits.length > 0 && (
+              <div className="kpi">
+                <span className="kpi-lbl">{l === 'en' ? 'Zhongli exit ramps' : '中壢出口匝道'}</span>
+                <div className="kpi-val">
+                  {exits.map((f, i) => (
+                    <Fragment key={f.id}>
+                      {i > 0 && ' + '}
+                      <button className="inline-jump" onClick={() => onFocusCoord?.([f.lon, f.lat])}>
+                        {n0(Math.round(f.vph / 60))}
+                      </button>
+                    </Fragment>
+                  ))} <small className="kpi-meta">{l === 'en' ? 'veh/min' : '輛/分'}</small>
+                </div>
+                <span className="kpi-meta">{l === 'en' ? 'Last 1 min · Zhongli area' : '近 1 分鐘・中壢區'}</span>
+              </div>
+            )}
+            {live.docks.data.length > 0 && (
+              <div className="kpi wide">
+                <span className="kpi-lbl">{l === 'en' ? 'YouBike bikes / docks' : '校內 YouBike 車輛／車柱'}</span>
+                <div className="kpi-val sm">
+                  {live.docks.data.map((d, i) => (
+                    <Fragment key={d.id}>
+                      {i > 0 && ' · '}
+                      <button className={`inline-jump ${d.bikes <= 2 ? 'act' : ''}`} onClick={() => onFocusCoord?.([d.lon, d.lat])}>
+                        {l === 'en' ? DOCK_EN[d.id] ?? d.en : d.zh.replace('中央大學', '')} {d.bikes}/{d.capacity}
+                      </button>
+                    </Fragment>
+                  ))}
+                </div>
+                <span className="kpi-meta"><M m={live.docks.meta} l={l} /></span>
+              </div>
+            )}
+          </div>
+        </>
+      )}
+
+      <h2 className="h">{l === 'en' ? 'Campus inventory' : '校園基線盤點'}</h2>
+      <dl className="rows">
+        {campus && hMeta && (
+          <div>
+            <dt>{l === 'en' ? '3D volume' : '建物量體'}</dt>
+            <dd>
+              <b>{blds.length}</b> {l === 'en' ? 'buildings' : '棟'} · {measured} {l === 'en' ? 'NLSC LiDAR' : '棟光達實測'}{modeledH ? ` + ${modeledH} OSM` : ''} · max {maxH.toFixed(1)} m ({flatBlds} {l === 'en' ? 'flat' : '平面'})
+              <small><M m={hMeta} l={l} /></small>
+            </dd>
+          </div>
         )}
         {eco && ecoMeta && (
-          <li>
-            <span>{l === 'en' ? 'Water on campus' : '校內水體'}</span>
-            <b>{eco.onCampusWater.map(w => w.name).join(' · ')}</b>
-            <small>{l === 'en' ? 'Campus sits in the 石門大圳 irrigation network; 老街溪 drains east.' : '校區位於石門大圳灌溉水網內，東側為老街溪。'}<br /><M m={ecoMeta} l={l} /></small>
-          </li>
+          <div>
+            <dt>{l === 'en' ? 'Waterways' : '校內水系'}</dt>
+            <dd>
+              {eco.onCampusWater.map(w => w.name).join(' · ')}
+              <small><M m={ecoMeta} l={l} /></small>
+            </dd>
+          </div>
         )}
         {eco && bioMeta && (
-          <li>
-            <span>{l === 'en' ? 'Wildlife recorded on campus' : '校內物種紀錄'}</span>
-            <b>{n0(eco.bio.species)} {l === 'en' ? 'species' : '種'} · {classes.map(([k, v]) => `${v} ${pick(CLASS[k], l)}`).join(' · ')}</b>
-            <small><M m={bioMeta} l={l} /> · {n0(eco.bio.records)} {l === 'en' ? 'records' : '筆'}, {l === 'en' ? `${n0(eco.bio.datasets.eBird ?? 0)} of them eBird hotspot lists` : `其中 ${n0(eco.bio.datasets.eBird ?? 0)} 筆為 eBird 熱點清單`} · {l === 'en' ? `${eco.bio.pinned} with ≤50 m position are pinned; the rest are counted, not pinned` : `${eco.bio.pinned} 筆定位 ≤50 m 者標點，其餘僅計數`}</small>
-          </li>
+          <div>
+            <dt>{l === 'en' ? 'Wildlife' : '生態物種'}</dt>
+            <dd>
+              <b>{n0(eco.bio.species)}</b> {l === 'en' ? 'species' : '種'} · {classes.slice(0, 3).map(([k, v]) => `${v} ${pick(CLASS[k], l)}`).join(' · ')}
+              <small><M m={bioMeta} l={l} /> · {n0(eco.bio.records)} {l === 'en' ? 'records' : '筆'} ({eco.bio.pinned} {l === 'en' ? 'pinned' : '標點'})</small>
+            </dd>
+          </div>
         )}
         {seats.length > 0 && dirMeta && (
-          <li>
-            <span>{l === 'en' ? 'Published seating' : '公開座位數'}</span>
-            <b>{seats.slice(0, 4).map(e => `${(e.zh ?? '').replace(/\s*\(.*\)$/, '')} ${n0(e.capacity!.value)}`).join(' · ')}</b>
-            <small>{l === 'en' ? 'Official NCU pages; each source is linked in Find. Dorm bed counts are not published.' : '來源為中大官方頁面，於「查詢」逐筆連結。宿舍床位未公開。'}<br /><M m={dirMeta} l={l} /></small>
-          </li>
+          <div>
+            <dt>{l === 'en' ? 'Seating' : '公開座位'}</dt>
+            <dd>
+              {seats.slice(0, 3).map(e => `${(e.zh ?? '').replace(/\s*\(.*\)$/, '')} ${n0(e.capacity!.value)}`).join(' · ')}
+              <small><M m={dirMeta} l={l} /></small>
+            </dd>
+          </div>
         )}
         {eco && ecoMeta && (
-          <li>
-            <span>{l === 'en' ? 'Parking areas mapped' : '已標示停車區'}</span>
-            <b>{lots.length} {l === 'en' ? 'areas' : '處'} · {l === 'en' ? `capacity known for ${cap.length}` : `${cap.length} 處有容量`} ({n0(cap.reduce((s, f) => s + (f.properties.capacity ?? 0), 0))} {l === 'en' ? 'bike spaces' : '自行車位'})</b>
-            <small>{l === 'en' ? 'No current official car or scooter count is published (last: 2014–2020); live counts need 總務處 gate data.' : '現行汽機車格數未公開（最近公布為 2014–2020 年），即時數需總務處柵欄資料。'}<br /><M m={ecoMeta} l={l} /></small>
-          </li>
+          <div>
+            <dt>{l === 'en' ? 'Parking' : '停車區'}</dt>
+            <dd>
+              {lots.length} {l === 'en' ? 'areas' : '處'} · {n0(cap.reduce((s, f) => s + (f.properties.capacity ?? 0), 0))} {l === 'en' ? 'bike spaces' : '自行車位'}
+              <small><M m={ecoMeta} l={l} /></small>
+            </dd>
+          </div>
         )}
-        {campus && hMeta && (
-          <li>
-            <span>{l === 'en' ? 'Built volume (3D)' : '建物量體（3D）'}</span>
-            <b>
-              {blds.length} {l === 'en' ? 'buildings' : '棟'} ·{' '}
-              {l === 'en'
-                ? `${measured} NLSC measured${modeledH ? ` + ${modeledH} OSM floors` : ''} · max ${maxH.toFixed(1)} m`
-                : `${measured} 棟國土測繪實測${modeledH ? ` + ${modeledH} 棟 OSM 樓層` : ''}・最高 ${maxH.toFixed(1)} m`}
-            </b>
-            <small>{l === 'en'
-              ? `LiDAR heights (BUILD_H) from NLSC Taoyuan 3D Tiles, used only when the NLSC block sits inside the footprint; a footprint with several roof sections takes the tallest. ${flatBlds} footprints with no block inside stay flat, never guessed.`
-              : `採國土測繪中心桃園市分棟三維建物 LiDAR 實測高度（BUILD_H），僅在建物塊位於輪廓內時採用；多個屋頂分區取最高。其餘 ${flatBlds} 棟無對應維持平面，絕不推估。`}<br /><M m={hMeta} l={l} /></small>
-          </li>
-        )}
-      </ul>
+      </dl>
 
       {nbs && <NbsGallery dataset={nbs} selectedId={selectedNbsId} onSelect={onSelectNbs} l={l} />}
 
