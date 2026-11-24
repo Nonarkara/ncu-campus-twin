@@ -1,8 +1,12 @@
 {
   "name": "ncu-campus-twin",
+  "version": "1.0.1",
   "private": true,
   "type": "module",
   "scripts": {
+    "postinstall": "node pipeline/build-info.mjs",
+    "pretest": "node pipeline/build-info.mjs",
+    "prebuild": "node pipeline/build-info.mjs",
     "cook": "node pipeline/cook.mjs",
     "heights": "node pipeline/heights.mjs",
     "surroundings": "node pipeline/surroundings.mjs",

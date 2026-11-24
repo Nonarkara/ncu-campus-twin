@@ -1,4 +1,6 @@
 // Edge: static assets + /api/today. Fetches open feeds, wraps each in {source, tier, asOf}, runs the Today engine.
+import pkg from '../package.json';
+import { BUILD_SHA } from '../src/shared/build-info.generated';
 import { buildToday, type Feed, type Forecast, type Air } from '../src/shared/today';
 import { parseVDLive, type Live } from '../src/shared/live';
 import {
@@ -12,7 +14,7 @@ import {
   type NewsPayload,
 } from '../src/shared/news';
 
-interface Env { ASSETS: Fetcher; LIVE: KVNamespace; DEV?: string }
+interface Env { ASSETS: Fetcher; LIVE: KVNamespace; DEV?: string; BUILD_SHA?: string }
 const LAT = 24.9684, LON = 121.1916; // OSM relation/18727079 centre
 
 async function getJson(url: string, ms = 12000) {
@@ -96,8 +98,21 @@ export default {
     if (url.pathname === '/api/health') return secure(await health(env));
     if (url.pathname === '/api/live') return secure(await live(env));
     if (url.pathname === '/api/news') return secure(await news(env, url, ctx));
-    if (url.pathname !== '/api/today') return secure(await env.ASSETS.fetch(req));
-    return secure(await today(url, ctx));
+    if (url.pathname === '/api/today') return secure(await today(url, ctx));
+    if (url.pathname.startsWith('/api/')) {
+      return secure(new Response(JSON.stringify({ error: 'Not found' }), {
+        status: 404,
+        headers: { 'content-type': 'application/json; charset=utf-8', 'cache-control': 'no-store' },
+      }));
+    }
+    const assetRes = await env.ASSETS.fetch(req);
+    if (assetRes.status === 404) {
+      return secure(new Response('Not found', {
+        status: 404,
+        headers: { 'content-type': 'text/plain; charset=utf-8', 'cache-control': 'no-store' },
+      }));
+    }
+    return secure(assetRes);
   },
 };
 
@@ -196,6 +211,8 @@ async function health(env: Env): Promise<Response> {
   return new Response(
     JSON.stringify({
       status,
+      version: pkg.version,
+      build: env.BUILD_SHA || BUILD_SHA || 'unknown',
       checkedAt: new Date(nowMs).toISOString(),
       loops: {
         road: { tier: roadFresh ? 'live' : 'stale', asOf: roadAsOf, ageMin: roadAgeMin, detectors: roadAll.length },
