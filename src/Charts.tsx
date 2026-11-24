@@ -177,8 +177,10 @@ export function HeadwayStrip({
   tracks: { label: string; times: string[]; highlight?: boolean }[];
   l: 'en' | 'zh';
 }) {
-  const W = 368, rowH = 18, padL = 56, padR = 8, padT = 6, padB = 16;
-  const H = padT + tracks.length * rowH + padB;
+  // Only render tracks that have times (compress empty ones)
+  const activeTracks = tracks.filter(tr => tr.times.length > 0);
+  const W = 368, rowH = 14, padL = 50, padR = 8, padT = 4, padB = 15;
+  const H = padT + activeTracks.length * rowH + padB;
   const startMin = 6 * 60;  // 06:00
   const endMin = 22 * 60;   // 22:00
   const plotW = W - padL - padR;
@@ -196,21 +198,21 @@ export function HeadwayStrip({
 
   return (
     <svg className="chart" viewBox={`0 0 ${W} ${H}`} role="img" aria-label={l === 'en' ? 'Daily bus departure schedule 06:00 to 22:00' : '每日公車班次分布 06:00–22:00'}>
-      {tracks.map((tr, r) => {
+      {activeTracks.map((tr, r) => {
         const y = padT + r * rowH + rowH / 2;
         return (
           <g key={tr.label}>
-            <text x={padL - 6} y={y + 3} textAnchor="end" className="ax">{tr.label}</text>
-            <line x1={padL} y1={y} x2={W - padR} y2={y} stroke="var(--line)" />
+            <text x={padL - 4} y={y + 2.5} textAnchor="end" className="ax">{tr.label}</text>
+            <line x1={padL} y1={y} x2={W - padR} y2={y} stroke="var(--line)" strokeWidth="0.5" />
             {tr.times.map((tm, i) => {
               const past = toMin(tm) < nowMin;
               return (
                 <rect
                   key={`${tm}-${i}`}
-                  x={xOf(tm) - 1.5}
-                  y={y - (tr.highlight ? 5 : 4)}
-                  width={tr.highlight ? 3.5 : 2.5}
-                  height={tr.highlight ? 10 : 8}
+                  x={xOf(tm) - 1}
+                  y={y - (tr.highlight ? 4 : 3)}
+                  width={tr.highlight ? 3 : 2}
+                  height={tr.highlight ? 8 : 6}
                   fill={past ? 'var(--chart-past)' : tr.highlight ? 'var(--amber)' : 'var(--ink)'}
                 />
               );
@@ -220,11 +222,11 @@ export function HeadwayStrip({
       })}
 
       {nowInRange && (
-        <line x1={xOf(nowHm)} y1={padT - 2} x2={xOf(nowHm)} y2={H - padB + 2} stroke="var(--amber)" strokeWidth="1.5" />
+        <line x1={xOf(nowHm)} y1={padT - 2} x2={xOf(nowHm)} y2={H - padB + 2} stroke="var(--amber)" strokeWidth="1" />
       )}
 
       {['06:00', '10:00', '14:00', '18:00', '22:00'].map((tm, idx) => (
-        <text key={tm} x={xOf(tm)} y={H - 2} textAnchor={idx === 0 ? 'start' : idx === 4 ? 'end' : 'middle'} className="ax">
+        <text key={tm} x={xOf(tm)} y={H - 4} textAnchor={idx === 0 ? 'start' : idx === 4 ? 'end' : 'middle'} className="ax">
           {tm.slice(0, 2)}h
         </text>
       ))}

@@ -1,5 +1,5 @@
 import { initialAppearance, saveAppearance } from './shared/appearance';
-import { Fragment, useEffect, useMemo, useRef, useState } from 'react';
+import { Fragment, lazy, Suspense, useEffect, useMemo, useRef, useState } from 'react';
 import type { Today, Meta } from './shared/today';
 import { CHECK_OPERATOR, SERVICE_LABELS, routes, scheduledRows, serviceDay, taipei, upcoming } from './shared/transit';
 import {
@@ -24,14 +24,17 @@ import {
 } from './shared/campus';
 import timetable from '../data/timetable.json';
 import serviceCalendar from '../data/service-calendar.json';
-import { CampusMap, type Lens } from './CampusMap';
-import { TwinLens, type Eco, type Ndvi, type Layer } from './TwinLens';
+import { TwinLens, type Eco, type Ndvi, type Layer, type VegetationView } from './TwinLens';
 import { FindLens, type Directory } from './FindLens';
+import type { Lens } from './CampusMap';
+import { MapBoundary } from './MapBoundary';
 import { DOCK_EN, SLOW_KMH, parseYouBike, type Live } from './shared/live';
 import type { NewsPayload } from './shared/news';
 import { HeadwayStrip, HourlyStrip, IslandChart, SolarSeasons, type SolarSeason, type MetricKey } from './Charts';
 import { NewsCorpusPanel, NewsTicker } from './NewsWire';
 import { NbsInspector, type NbsDataset } from './NbsInspector';
+
+const CampusMap = lazy(() => import('./CampusMap').then(m => ({ default: m.CampusMap })));
 
 type L = 'en' | 'zh';
 
@@ -660,7 +663,7 @@ function MoveLens({
   ];
 
   const inboundUp = upcoming(routes.toCampus.rows, routes.toCampus.col, hm, day);
-  const hasLocalBus = inboundUp.length > 0;
+  const hasScheduledTrips = inboundUp.length > 0 || upcoming(routes.toHSR.rows, routes.toHSR.col, hm, day).length > 0;
   const needTransfer = verified && (!nextTaipei || (nextTaipeiMin !== null && nextTaipeiMin > 90));
 
   return (
@@ -681,18 +684,18 @@ function MoveLens({
       {needTransfer && (
         <div className="advice">
           <strong>
-            {hasLocalBus
+            {hasScheduledTrips
               ? (l === 'en' ? 'NCU transfer advice' : '中大轉乘建議')
               : (l === 'en' ? 'After scheduled bus hours' : '今日公車班次已結束')}
           </strong>
           <p>
-            {hasLocalBus
+            {hasScheduledTrips
               ? (l === 'en'
-                ? 'Take 132 / 133 to Youmin Hospital (佑民醫院) and transfer to main-line 9025.'
-                : '請搭 132 / 133 至佑民醫院轉乘主線 9025 往臺北。')
+                ? 'For the 佑民醫院 (Youmin Hospital) transfer, confirm a campus departure and the main-line 9025 connection with the operators.'
+                : '如需在佑民醫院轉乘，請先向業者確認中大出發班次及 9025 主線銜接。')
               : (l === 'en'
-                ? 'Scheduled 9025A, 172/173, and 132/133 trips have ended for today. Use YouBike, taxi, or walk to Zhongda Rd.'
-                : '今日 9025A、172/173 與 132/133 班表班次皆已結束，建議改騎 YouBike、搭計程車或步行至中大路。')}
+                ? 'The published 9025A, 172/173, and inbound 132/133 schedules show no remaining trips. Check the operator for other services.'
+                : '9025A、172/173 與 132/133 進校班表今日已無後續班次。其他班次請向業者查詢。')}
           </p>
         </div>
       )}
@@ -785,7 +788,8 @@ export function App() {
   const [focusCoord, setFocusCoord] = useState<{ coord: [number, number]; seq: number } | null>(null);
   const [query, setQuery] = useState('');
   const [eco, setEco] = useState<Eco | null>(null);
-  const [ndvi, setNdvi] = useState<any>(null);
+  const [ndvi, setNdvi] = useState<Ndvi | null>(null);
+  const [vegetationView, setVegetationView] = useState<VegetationView>('latest');
   const [nbs, setNbs] = useState<NbsDataset | null>(null);
   const [selectedNbsId, setSelectedNbsId] = useState<string | null>(null);
   const [live, setLive] = useState<Live | null>(null);
@@ -825,7 +829,7 @@ export function App() {
   useEffect(() => {
     if (lens !== 'twin') return;
     if (!eco) fetch('/data/eco.json').then(r => r.json() as Promise<Eco>).then(setEco).catch(() => {});
-    if (!ndvi) fetch('/data/ndvi.json').then(r => r.json()).then(setNdvi).catch(() => {});
+    if (!ndvi) fetch('/data/ndvi.json').then(r => { if (!r.ok) throw new Error('Satellite layer unavailable'); return r.json() as Promise<Ndvi>; }).then(setNdvi).catch(() => {});
     if (!nbs) fetch('/data/nbs.json').then(r => r.json() as Promise<NbsDataset>).then(setNbs).catch(() => {});
   }, [lens, eco, ndvi, nbs]);
   const selectNbs = (id: string) => {
@@ -836,14 +840,46 @@ export function App() {
     revealInspector();
   };
   const twin = useMemo(
-    () => ({ eco, ndvi, live, nbs, selectedNbsId, onSelectNbs: selectNbs, layers }),
-    [eco, ndvi, live, nbs, selectedNbsId, layers],
+    () => ({ eco, ndvi, vegetationView, live, nbs, selectedNbsId, onSelectNbs: selectNbs, layers }),
+    [eco, ndvi, vegetationView, live, nbs, selectedNbsId, layers],
   );
 
   useEffect(() => {
     const id = setInterval(() => setClock(taipei(new Date())), 30000);
     return () => clearInterval(id);
   }, []);
+
+  // Numeric lens shortcuts are scoped to the tablist, with Alt as the global modifier.
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.defaultPrevented || e.isComposing || e.ctrlKey || e.metaKey || e.shiftKey) return;
+      if (e.target instanceof HTMLElement && (e.target.matches('input, textarea, select') || e.target.isContentEditable)) return;
+      const inTabs = e.target instanceof HTMLElement && !!e.target.closest('[role="tablist"]');
+      if ((inTabs || e.altKey) && /^Digit[1-5]$/.test(e.code)) {
+        const tab = document.querySelectorAll<HTMLButtonElement>('.tabs [role="tab"]')[Number(e.code.at(-1)) - 1];
+        e.preventDefault();
+        tab?.click();
+        tab?.focus();
+      } else if ((inTabs || e.altKey) && e.code === 'Slash') {
+        const searchInput = [...document.querySelectorAll<HTMLInputElement>('input[type="search"]')]
+          .find(input => input.getClientRects().length);
+        e.preventDefault();
+        if (searchInput) searchInput.focus();
+        else {
+          setLens('find');
+          requestAnimationFrame(() => document.querySelector<HTMLInputElement>('input.search.find')?.focus());
+        }
+      } else if (e.key === 'Escape' && !e.altKey) {
+        setSelectedBuildingId(null);
+        setSelectedNbsId(null);
+        setSelectedStopName(null);
+        setQuery('');
+      }
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, []);
+
   useEffect(() => {
     document.documentElement.lang = l === 'en' ? 'en' : 'zh-Hant';
   }, [l]);
@@ -949,8 +985,8 @@ export function App() {
 
         <div className="nav-row">
           <nav className="tabs" role="tablist">
-            {tabs.map(k => (
-              <button key={k} role="tab" aria-selected={lens === k} onClick={() => setLens(k)}>
+            {tabs.map((k, i) => (
+              <button key={k} role="tab" aria-keyshortcuts={`Alt+${i + 1}`} aria-selected={lens === k} onClick={() => setLens(k)}>
                 {tr(k, l)}
               </button>
             ))}
@@ -1010,7 +1046,9 @@ export function App() {
         {lens === 'twin' && (
           <TwinLens
             eco={eco}
-            ndvi={ndvi as Ndvi | null}
+            ndvi={ndvi}
+            vegetationView={vegetationView}
+            onVegetationView={setVegetationView}
             live={live}
             campus={campus}
             dir={dir}
@@ -1055,24 +1093,28 @@ export function App() {
       </section>
 
       <div className="map-col">
-        <CampusMap
-          appearance={appearance}
-          lens={lens}
-          l={l}
-          campus={campus}
-          selectedBuildingId={selectedBuildingId}
-          onSelectBuilding={id => {
-            setSelectedNbsId(null);
-            if (id === selectedBuildingId) revealInspector();
-            else inspectFromMap.current = true;
-            focusBuilding(id);
-          }}
-          portfolioIds={portfolioIds}
-          selectedStopName={selectedStopName}
-          onSelectStop={focusStop}
-          focusCoord={focusCoord}
-          twin={twin}
-        />
+        <MapBoundary l={l}>
+          <Suspense fallback={<div id="map" className="map map-loading" role="status">{l === 'en' ? 'Loading map…' : '載入地圖中…'}</div>}>
+            <CampusMap
+              appearance={appearance}
+              lens={lens}
+              l={l}
+              campus={campus}
+              selectedBuildingId={selectedBuildingId}
+              onSelectBuilding={id => {
+                setSelectedNbsId(null);
+                if (id === selectedBuildingId) revealInspector();
+                else inspectFromMap.current = true;
+                focusBuilding(id);
+              }}
+              portfolioIds={portfolioIds}
+              selectedStopName={selectedStopName}
+              onSelectStop={focusStop}
+              focusCoord={focusCoord}
+              twin={twin}
+            />
+          </Suspense>
+        </MapBoundary>
         <NewsTicker news={news} l={l} />
       </div>
     </div>

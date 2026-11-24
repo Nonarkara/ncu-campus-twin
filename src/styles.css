@@ -27,12 +27,18 @@ button { cursor: pointer; }
 .app { display: grid; grid-template-columns: minmax(0, 1fr); }
 .panel { min-width: 0; padding: 0 16px 16px; }
 .map-col { display: grid; grid-template-rows: 1fr auto; min-width: 0; }
+.map-loading { display: grid; place-items: center; color: var(--dim); }
+.map-message { text-align: center; }
+.map-message button { min-height: 44px; text-decoration: underline; color: var(--ink); }
 .map { height: 54vh; border-top: 1px solid var(--line); position: relative; }
 @media (min-width: 900px) {
   .app { grid-template-columns: 360px 1fr; height: 100vh; }
   .panel { overflow-y: auto; border-right: 1px solid var(--line); }
   .map-col { height: 100vh; }
-  .map { height: auto; min-height: 0; border-top: 0; }
+  .map-loading { display: grid; place-items: center; color: var(--dim); }
+.map-message { text-align: center; }
+.map-message button { min-height: 44px; text-decoration: underline; color: var(--ink); }
+.map { height: auto; min-height: 0; border-top: 0; }
 }
 @media (min-width: 1200px) {
   .app { grid-template-columns: var(--panel) 1fr; }
@@ -83,7 +89,7 @@ button { cursor: pointer; }
 .inline-jump:hover { color: var(--amber); border-bottom-color: var(--amber); }
 .inline-jump.act { color: var(--amber); }
 .ndvi-bar { padding: 6px 0 8px; }
-.ndvi-track { display: flex; height: 4px; gap: 1px; background: var(--line); }
+.ndvi-track { display: flex; height: 4px; margin-top: 5px; background: var(--line); }
 .ndvi-g { background: color-mix(in srgb, var(--ink) 85%, transparent); }
 .ndvi-s { background: var(--line-hi); }
 .ndvi-l { background: var(--amber); }

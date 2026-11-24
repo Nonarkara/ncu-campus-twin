@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
+import type { Ndvi, VegetationView } from './TwinLens';
 import type { Appearance } from './shared/appearance';
 import workerUrl from 'maplibre-gl/dist/maplibre-gl-worker.mjs?worker&url';
 import {
@@ -25,7 +26,8 @@ export type Lens = 'today' | 'twin' | 'power' | 'move' | 'find';
 export type TwinLayer = 'green' | 'water' | 'bio' | 'flow' | 'b3d' | 'nbs';
 export interface TwinData {
   eco: any;
-  ndvi: any;
+  ndvi: Ndvi | null;
+  vegetationView: VegetationView;
   live: import('./shared/live').Live | null;
   nbs: import('./NbsInspector').NbsDataset | null;
   selectedNbsId: string | null;
@@ -43,6 +45,15 @@ const AMBER = tone('#f59e0b', '#884b00');
 const ink = (opacity: number) => tone(`rgba(230,237,243,${opacity})`, `rgba(32,43,51,${opacity})`);
 const amber = (opacity: number) => tone(`rgba(245,158,11,${opacity})`, `rgba(136,75,0,${opacity})`);
 const HEIGHT_RAMP = [4, tone('#394552', '#d7e0e4'), 18, tone('#6e7e8f', '#98acb8'), 42, tone('#c8d2dc', '#45667c')] as const;
+const ndviPaint = (view: VegetationView): ExpressionSpecification => {
+  const shift: ExpressionSpecification = view === 'repeat'
+    ? ['coalesce', ['get', 'repeated'], 'masked']
+    : ['coalesce', ['get', 'shift'], ['case', ['<=', ['get', 'd'], -0.15], 'lower', ['>=', ['get', 'd'], 0.15], 'higher', 'other']];
+  const other: ExpressionSpecification = view === 'repeat' ? ink(0.08)
+    : ['interpolate', ['linear'], ['get', 'v'], 0.1, ink(0), 0.4, ink(0.10), 0.8, ink(0.32)];
+  return ['match', shift, 'lower', amber(0.60), 'higher', ink(0.50), 'masked', ink(0), other];
+};
+
 const EMPTY_FC = { type: 'FeatureCollection' as const, features: [] };
 
 const style: StyleSpecification = {
@@ -205,8 +216,7 @@ export function CampusMap({
       // Twin lens: Sentinel-2 NDVI grid, water network, wildlife pins, live docks, detectors, and NbS field dots
       for (const id of ['ndvi', 'water', 'bio', 'docks', 'vd', 'nbs']) m.addSource(id, { type: 'geojson', data: EMPTY_FC });
       m.addLayer({ id: 'ndvi', type: 'fill', source: 'ndvi', layout: { visibility: 'none' }, paint: {
-        'fill-color': ['case', ['<=', ['get', 'd'], -0.15], amber(0.6),
-          ['interpolate', ['linear'], ['get', 'v'], 0.1, ink(0), 0.4, ink(0.10), 0.8, ink(0.32)]] } });
+        'fill-color': ndviPaint('latest') } });
       m.addLayer({ id: 'water-area', type: 'fill', source: 'water', filter: ['==', ['geometry-type'], 'Polygon'], layout: { visibility: 'none' },
         paint: { 'fill-color': ink(0.22), 'fill-outline-color': ink(0.7) } });
       m.addLayer({ id: 'water-line', type: 'line', source: 'water', filter: ['==', ['geometry-type'], 'LineString'], layout: { visibility: 'none' },
@@ -549,6 +559,10 @@ export function CampusMap({
     });
   }, [ready, twin.ndvi, twin.eco, twin.live, twin.nbs]);
 
+  useEffect(() => {
+    if (ready) map.current?.setPaintProperty('ndvi', 'fill-color', ndviPaint(twin.vegetationView));
+  }, [ready, twin.vegetationView]);
+
   // Twin visibility + camera: tilt into 3D on entering the Twin lens, flat elsewhere
   useEffect(() => {
     const m = map.current;
@@ -630,12 +644,15 @@ export function CampusMap({
   } else if (lens === 'find') {
     legend = l === 'en' ? 'Tap “Map ›” in the directory to locate a building · dashed = OSM boundary' : '點名錄中的「地圖 ›」定位建物 · 虛線 = OSM 校界';
   } else if (lens === 'twin') {
-    legend = l === 'en'
-      ? 'Stronger fill = higher NDVI (Sentinel-2) · amber = NDVI down ≥0.15 YoY · drag to rotate · 3D = NLSC measured BUILD_H'
-      : '填色越深，NDVI 越高（Sentinel-2）・琥珀 = NDVI 較去年降 ≥0.15・拖曳旋轉・3D 採國土測繪實測高度';
+    const overlay = twin.layers.has('green') && twin.ndvi;
+    legend = overlay
+      ? (twin.vegetationView === 'repeat'
+        ? (l === 'en' ? 'Both 2026 passes · amber ↓ lower NDVI · strong ink ↑ higher · gaps masked' : '兩次 2026 年影像・琥珀 ↓ NDVI 下降・高對比 ↑ 上升・空白為遮罩')
+        : (l === 'en' ? 'Latest pass · amber ↓ lower NDVI · strong ink ↑ higher · faint fill = other' : '最新影像・琥珀 ↓ NDVI 下降・高對比 ↑ 上升・淡色為其他'))
+      : (l === 'en' ? '3D heights: NLSC surveys or modeled OSM levels · drag to rotate' : '立體高度：國土測繪實測或 OSM 樓層估算・拖曳旋轉');
   } else if (lens === 'move') {
     legend = selectedStopName
-      ? (l === 'en' ? `${selectedStopName} · dashed ring = 300 m (~4 min walk)` : `${selectedStopName} · 虛線圓 = 300 公尺（步行約 4 分）`)
+      ? (l === 'en' ? `${selectedStopName} · dashed ring = 300 m straight-line radius` : `${selectedStopName} · 虛線圓 = 直線半徑 300 公尺`)
       : (l === 'en' ? 'Select an on-campus stop (white dot) to show a 300 m radius' : '選擇校內白點公車站以顯示 300 m 半徑');
   } else {
     legend = l === 'en'

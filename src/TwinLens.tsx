@@ -8,6 +8,8 @@ import type { CampusData } from './shared/campus';
 import type { Directory } from './FindLens';
 import { NbsGallery, type NbsDataset } from './NbsInspector';
 
+import type { FeatureCollection, Polygon } from 'geojson';
+
 type L = 'en' | 'zh';
 export type Layer = 'green' | 'water' | 'bio' | 'flow' | 'b3d' | 'nbs';
 export const LAYERS: { k: Layer; t: [string, string] }[] = [
@@ -32,7 +34,11 @@ const age = (iso: string | null, l: L) => {
 };
 // Relative age ('5m ago') only for values meant to be current. Snapshots, records and surveys show their own date.
 const REL = new Set(['live', 'forecast', 'modeled']);
-const M = ({ m, l }: { m: { source: string; tier: string; asOf: string | null }; l: L }) => <span className="nb">{m.source} · {l === 'en' ? m.tier : TIER[m.tier] ?? m.tier} · {REL.has(m.tier) ? age(m.asOf, l) : (m.asOf ?? '—').slice(0, 10)}</span>;
+const M = ({ m, l }: { m: { source: string; tier: string; asOf: string | null }; l: L }) => (
+  <span>{m.source} · {l === 'en' ? m.tier : TIER[m.tier] ?? m.tier} ·{' '}
+    <span className="nb">{REL.has(m.tier) ? age(m.asOf, l) : (m.asOf ?? '—').slice(0, 10)}</span>
+  </span>
+);
 /** Newest NLSC survey month (MDATE YYYYMM) among measured footprints, as an ISO date: the age of the heights, not of our download. */
 const surveyMonth = (blds: CampusData['buildings']['features']) => {
   const m = blds.map(b => b.properties.height_mdate).filter((x): x is string => !!x && /^\d{6}$/.test(x)).sort().at(-1);
@@ -52,34 +58,29 @@ export interface Eco {
   bio: { records: number; species: number; byClass: Record<string, number>; datasets: Record<string, number>; years: [number, number]; pinned: number; pinRule: string;
     top: { sci: string; vn: string | null; n: number }[] };
 }
+type Variation = 'higher' | 'lower' | 'other';
+type CellCounts = { comparable: number; higher: number; lower: number; other: number };
+export type VegetationView = 'latest' | 'repeat';
 export interface Ndvi {
-  meta: Meta & { scenes: { date: string }[]; caveat: string; method: string };
+  meta: Meta & { scenes: { id: string; date: string; sourceUrl?: string }[]; repeatScene?: { id: string; date: string; sourceUrl?: string }; threshold?: number };
   green_share_now: number;
   green_share_prev: number;
+  cells_in_campus: number;
   cells_compared: number;
-  area_m2_compared: number;
-  grid?: { features: { properties: { v: number; p: number; d: number } }[] };
+  latest?: CellCounts;
+  repeat?: CellCounts;
+  grid: FeatureCollection<Polygon, { v: number; p: number; d: number; shift?: Variation; repeated?: Variation | null }>;
 }
 
-export function TwinLens({ eco, ndvi, live, campus, dir, nbs, selectedNbsId, onSelectNbs, layers, onToggle, onFocusCoord, l }: {
-  eco: Eco | null; ndvi: Ndvi | null; live: Live | null; campus: CampusData | null; dir: Directory | null;
+export function TwinLens({ eco, ndvi, vegetationView, onVegetationView, live, campus, dir, nbs, selectedNbsId, onSelectNbs, layers, onToggle, onFocusCoord, l }: {
+  eco: Eco | null; ndvi: Ndvi | null; vegetationView: VegetationView; onVegetationView: (view: VegetationView) => void;
+  live: Live | null; campus: CampusData | null; dir: Directory | null;
   nbs: NbsDataset | null; selectedNbsId: string | null; onSelectNbs: (id: string) => void;
   layers: Set<Layer>; onToggle: (k: Layer) => void; onFocusCoord?: (coord: [number, number]) => void; l: L;
 }) {
   const delta = ndvi ? Math.round((ndvi.green_share_now - ndvi.green_share_prev) * 10) / 10 : null;
-  const ndviShift = (() => {
-    const feats = ndvi?.grid?.features;
-    if (!feats?.length) return null;
-    let gained = 0, lost = 0, steady = 0;
-    for (const f of feats) {
-      const d = f.properties.d;
-      if (d >= 0.05) gained++;
-      else if (d <= -0.05) lost++;
-      else steady++;
-    }
-    const tot = feats.length;
-    return { gained, lost, steady, tot, pctGained: Math.round((gained / tot) * 100), pctLost: Math.round((lost / tot) * 100) };
-  })();
+  const ndviShift = ndvi?.[vegetationView];
+  const repeatScene = ndvi?.meta.repeatScene;
   const blds = campus?.buildings.features ?? [];
   const measured = blds.filter(b => b.properties.height_tier === 'observed').length;
   const modeledH = blds.filter(b => b.properties.height_tier === 'modeled').length;
@@ -105,7 +106,7 @@ export function TwinLens({ eco, ndvi, live, campus, dir, nbs, selectedNbsId, onS
         <div className="hero">
           <b>{ndvi.green_share_now}<small>%</small></b>
           <p>
-            {l === 'en' ? 'of campus is vegetated, ' : '校園植被覆蓋率，'}
+            {l === 'en' ? 'of compared cells meet the vegetation threshold, ' : '有效網格達植被門檻，'}
             <span className={delta !== null && delta <= -2 ? 'act' : ''}>
               {delta !== null && (delta > 0 ? '+' : '')}{delta}{' '}
               {l === 'en'
@@ -122,22 +123,34 @@ export function TwinLens({ eco, ndvi, live, campus, dir, nbs, selectedNbsId, onS
           <button key={x.k} aria-pressed={layers.has(x.k)} onClick={() => onToggle(x.k)}>{pick(x.t, l)}</button>
         ))}
       </div>
-      <a className="tomap" href="#map">{l === 'en' ? '3D campus map ↓' : '立體校園地圖 ↓'}</a>
-
       {ndvi && ndviShift && (
-        <div className="ndvi-bar" aria-label={l === 'en' ? 'NDVI year-on-year cell change' : 'NDVI 年變化分布'}>
-          <div className="ndvi-track">
-            <span className="ndvi-g" style={{ width: `${(ndviShift.gained / ndviShift.tot) * 100}%` }} />
-            <span className="ndvi-s" style={{ width: `${(ndviShift.steady / ndviShift.tot) * 100}%` }} />
-            <span className="ndvi-l" style={{ width: `${(ndviShift.lost / ndviShift.tot) * 100}%` }} />
+        <div className="ndvi-bar">
+          {repeatScene && layers.has('green') && (
+            <div className="seg" role="group" aria-label={l === 'en' ? 'Vegetation comparison' : '植被比較'}>
+              <button aria-pressed={vegetationView === 'latest'} onClick={() => onVegetationView('latest')}>{l === 'en' ? 'Latest pass' : '最新影像'}</button>
+              <button aria-pressed={vegetationView === 'repeat'} onClick={() => onVegetationView('repeat')}>{l === 'en' ? 'Repeat change' : '重複變化'}</button>
+            </div>
+          )}
+          <div className="ndvi-track" aria-hidden="true">
+            <span className="ndvi-g" style={{ width: `${(ndviShift.higher / ndviShift.comparable) * 100}%` }} />
+            <span className="ndvi-s" style={{ width: `${(ndviShift.other / ndviShift.comparable) * 100}%` }} />
+            <span className="ndvi-l" style={{ width: `${(ndviShift.lower / ndviShift.comparable) * 100}%` }} />
           </div>
-          <div className="meta">
+          <p className="meta">
             {l === 'en'
-              ? `${ndviShift.gained} cells greener (≥+0.05) · ${ndviShift.steady} steady · ${ndviShift.lost} drier (≤−0.05) across ${n0(ndvi.cells_compared)} × 20 m cells`
-              : `${ndviShift.gained} 格變綠（≥+0.05）・${ndviShift.steady} 格持平・${ndviShift.lost} 格轉弱（≤−0.05），共 ${n0(ndvi.cells_compared)} 格 20 m 網格`}
-          </div>
+              ? `↑ ${ndviShift.higher} higher · ${ndviShift.other} other · ↓ ${ndviShift.lower} lower`
+              : `↑ ${ndviShift.higher} 上升・${ndviShift.other} 其他・↓ ${ndviShift.lower} 下降`}
+            {' · '}{l === 'en' ? `${n0(ndviShift.comparable)}/${n0(ndvi.cells_in_campus)} cells` : `${n0(ndviShift.comparable)}/${n0(ndvi.cells_in_campus)} 格`}
+            <br />
+            {l === 'en' ? '20 m cells · NDVI change ≥ ' : '20 公尺網格・NDVI 變化量 ≥ '}{ndvi.meta.threshold}
+            {vegetationView === 'repeat' && repeatScene && <>
+              {' · '}{l === 'en' ? 'both 2026 passes' : '兩次 2026 年影像'}{' '}
+              <span className="nb">{repeatScene.date}</span> / <span className="nb">{ndvi.meta.asOf}</span>
+            </>}
+          </p>
         </div>
       )}
+      <a className="tomap" href="#map">{l === 'en' ? 'Show campus map ↓' : '查看校園地圖 ↓'}</a>
 
       <ul className="steady">
         {main.length > 0 && live && (
@@ -239,8 +252,13 @@ export function TwinLens({ eco, ndvi, live, campus, dir, nbs, selectedNbsId, onS
       {ndvi && (
         <p className="note">
           {l === 'en'
-            ? `${ndvi.meta.method}. ${ndvi.meta.caveat}`
-            : '以 20 m 解析度 Sentinel-2 L2A 影像計算 NDVI=(B08−B04)/(B08+B04)，僅保留無雲格點（SCL 4–7），NDVI ≥ 0.4 計為植被。兩期影像分別為 2025-11-15 與 2026-11-17，皆為晴朗無雲且僅差 2 日，除草、耕作或工程仍可能顯示變化。'}
+            ? 'NDVI measures a vegetation signal. The cover threshold is 0.4. Repeat change uses two 2026 passes against the same 2025 reference. Check the site before assigning a cause.'
+            : 'NDVI 反映植被訊號，植被門檻為 0.4。重複變化為兩次 2026 年影像對比同一張 2025 年影像。成因須現地查證。'}{' '}
+          <a href="https://sentiwiki.copernicus.eu/web/s2-processing" target="_blank" rel="noopener noreferrer">{l === 'en' ? 'Sentinel-2 method' : 'Sentinel-2 處理方法'}</a>
+          {[...ndvi.meta.scenes, ...(repeatScene ? [repeatScene] : [])]
+            .filter(scene => scene.sourceUrl).sort((a, b) => a.date.localeCompare(b.date)).map(scene => (
+              <Fragment key={scene.id}>{' · '}<a href={scene.sourceUrl} target="_blank" rel="noopener noreferrer">{scene.date}</a></Fragment>
+            ))}
         </p>
       )}
     </>
