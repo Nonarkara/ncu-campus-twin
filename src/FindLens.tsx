@@ -18,7 +18,7 @@ const WORDS: Record<string, string> = {
 const ORDER = ['safety', 'academic', 'admin', 'research', 'housing', 'facility'];
 const UNIT: Record<string, [string, string]> = { seats: ['seats', '席'], beds: ['beds', '床'], spaces: ['spaces', '格'] };
 
-export function FindLens({ dir, onFocusBuilding, l }: { dir: Directory | null; onFocusBuilding: (id: string) => void; l: L }) {
+export function FindLens({ dir, onFocusBuilding, l }: { dir: Directory | null; onFocusBuilding: (id: string, trigger: HTMLButtonElement) => void; l: L }) {
   const [q, setQ] = useState('');
   const [cat, setCat] = useState<string | null>(null);
   const cats = useMemo(() => (dir ? ORDER.map(k => dir.categories.find(c => c.key === k)).filter(Boolean) as Directory['categories'] : []), [dir]);
@@ -35,14 +35,6 @@ export function FindLens({ dir, onFocusBuilding, l }: { dir: Directory | null; o
 
   return (
     <>
-      <div className="hero">
-        <b>{total}</b>
-        <p>{l === 'en' ? `units, offices and places, each linked to its official page · ${withCap} with a published capacity`
-          : `個單位、處室與場所，皆連結官方頁面・${withCap} 項有公開容量`}<br />
-          <small className="meta">
-            {l === 'en' ? dir.meta.source : '中大官方網頁（逐筆附原始連結）'} · <span className="nb">{dir.meta.asOf}</span>
-          </small></p>
-      </div>
       <input type="search" className="search find" value={q} onChange={e => setQ(e.target.value)}
         placeholder={l === 'en' ? 'Department, office, dorm…' : '系所、處室、宿舍…'} aria-label={l === 'en' ? 'Search directory' : '搜尋名錄'} />
       <div className="chips" role="group">
@@ -70,7 +62,7 @@ export function FindLens({ dir, onFocusBuilding, l }: { dir: Directory | null; o
                     {e.tels?.length === 1 && <a href={e.tels[0].href}>{l === 'en' ? (e.phone ?? '').replace(/分機\s*/g, 'ext. ') : e.phone}</a>}
                     {(e.tels?.length ?? 0) > 1 && e.tels.map(t => <a key={t.href} href={t.href}>{l === 'en' ? t.label.replace(/分機\s*/g, 'ext. ') : t.label}</a>)}
                     {!e.tels?.length && e.phone && <span>{l === 'en' ? e.phone.replace(/分機\s*/g, 'ext. ') : e.phone}</span>}
-                    {e.osm && <button onClick={() => onFocusBuilding(e.osm!)}>{l === 'en' ? 'Map' : '地圖'} ›</button>}
+                    {e.osm && <button onClick={event => onFocusBuilding(e.osm!, event.currentTarget)}>{l === 'en' ? 'Map' : '地圖'} ›</button>}
                   </span>
                 </li>
               );
@@ -78,7 +70,11 @@ export function FindLens({ dir, onFocusBuilding, l }: { dir: Directory | null; o
           </ul>
         </details>
       ))}
-      {hits.length === 0 && <p className="note">{l === 'en' ? `No entry matches “${q}”.` : `沒有符合「${q}」的項目。`}</p>}
+      {hits.length === 0 && <p className="note" role="status">{l === 'en' ? `No entry matches “${q}”.` : `沒有符合「${q}」的項目。`}</p>}
+      <p className="meta directory-source">
+        {l === 'en' ? `${total} entries · ${withCap} with published capacity · ${dir.meta.source}`
+          : `${total} 筆名錄・${withCap} 筆有公開容量・中大官方網頁`} · <span className="nb">{dir.meta.asOf}</span>
+      </p>
       <p className="note">{l === 'en'
         ? '“Map” appears only where the official building name matches a mapped footprint. Dorm bed counts and current car parking are not published.'
         : '僅在官方建物名稱與地圖輪廓相符時顯示「地圖」。宿舍床位與現行汽車格數未公開。'}</p>

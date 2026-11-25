@@ -34,6 +34,33 @@ import { HeadwayStrip, HourlyStrip, IslandChart, SolarSeasons, type SolarSeason,
 import { NewsCorpusPanel, NewsTicker } from './NewsWire';
 import { NbsInspector, type NbsDataset } from './NbsInspector';
 
+async function fetchFeed<T>(url: string, signal: AbortSignal, cache?: RequestCache): Promise<T> {
+  const response = await fetch(url, { cache, signal: AbortSignal.any([signal, AbortSignal.timeout(8000)]) });
+  if (!response.ok) throw new Error(`Feed returned ${response.status}`);
+  return response.json() as Promise<T>;
+}
+
+function pollFeed<T>(load: (signal: AbortSignal) => Promise<T>, apply: (data: T) => void, fail: () => void) {
+  const lifetime = new AbortController();
+  let pending = false;
+  const refresh = () => {
+    if (document.hidden || pending) return;
+    pending = true;
+    void load(lifetime.signal)
+      .then(data => { if (!lifetime.signal.aborted) apply(data); })
+      .catch(() => { if (!lifetime.signal.aborted) fail(); })
+      .finally(() => { pending = false; });
+  };
+  refresh();
+  const timer = setInterval(refresh, 300000);
+  document.addEventListener('visibilitychange', refresh);
+  return () => {
+    lifetime.abort();
+    clearInterval(timer);
+    document.removeEventListener('visibilitychange', refresh);
+  };
+}
+
 const CampusMap = lazy(() => import('./CampusMap').then(m => ({ default: m.CampusMap })));
 
 type L = 'en' | 'zh';
@@ -57,7 +84,7 @@ const T = {
 
 const tr = (k: keyof typeof T, l: L) => T[k][l === 'en' ? 0 : 1];
 const pick = (p: readonly [string, string] | string, l: L) => (typeof p === 'string' ? p : l === 'en' ? p[0] : p[1]);
-const TIER: Record<string, string> = { live: '即時', forecast: '預報', modeled: '模式', schedule: '班表', unavailable: '無資料' };
+const TIER: Record<string, string> = { live: '即時', forecast: '預報', modeled: '模式', schedule: '班表', unavailable: '無資料', stale: '已過時' };
 
 function age(iso: string | null, l: L) {
   if (!iso) return '—';
@@ -296,6 +323,17 @@ function TodayLens({
 
   return (
     <>
+      {!err && t.forecastMeta.tier === 'unavailable' && (
+        <p className="note" role="status">{l === 'en' ? 'Weather forecast unavailable.' : '天氣預報暫時無法取得。'}</p>
+      )}
+      {err && (
+        <p className="note" role="status">
+          {l === 'en' ? 'Refresh failed. Showing the previous bulletin from' : '更新失敗。仍顯示上一份公告：'}{' '}
+          <time dateTime={t.now}>{new Date(t.now).toLocaleString(l === 'en' ? 'en-GB' : 'zh-TW', {
+            timeZone: 'Asia/Taipei', month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit',
+          })} TPE</time>
+        </p>
+      )}
       <div className="hero">
         <b className={act ? 'act' : ''}>{liveItems.length}</b>
         <p>
@@ -405,7 +443,6 @@ function TodayLens({
           ))}
         </ul>
       </details>
-      <a className="tomap" href="#map">{l === 'en' ? 'Campus map ↓' : '校園地圖 ↓'}</a>
     </>
   );
 }
@@ -620,7 +657,7 @@ function MoveLens({
 }: {
   clock: ReturnType<typeof taipei>;
   selectedStopName: string | null;
-  onSelectStop: (name: string) => void;
+  onSelectStop: (name: string, trigger: HTMLButtonElement) => void;
   live: Live | null;
   onFocusCoord: (coord: [number, number]) => void;
   l: L;
@@ -715,7 +752,7 @@ function MoveLens({
             key={name}
             className="stop-btn"
             aria-pressed={selectedStopName === name}
-            onClick={() => onSelectStop(name)}
+            onClick={e => onSelectStop(name, e.currentTarget)}
           >
             {name}
           </button>
@@ -785,10 +822,12 @@ export function App() {
   const [selectedBuildingId, setSelectedBuildingId] = useState<string | null>(null);
   const [selectedStopName, setSelectedStopName] = useState<string | null>(null);
   const [portfolioIds, setPortfolioIds] = useState<Set<string>>(() => new Set(LAB_PRESET_IDS));
-  const [focusCoord, setFocusCoord] = useState<{ coord: [number, number]; seq: number } | null>(null);
+  const [focusCoord, setFocusCoord] = useState<{ coord: [number, number]; seq: number; stopRadius?: true } | null>(null);
   const [query, setQuery] = useState('');
   const [eco, setEco] = useState<Eco | null>(null);
   const [ndvi, setNdvi] = useState<Ndvi | null>(null);
+  const [ndviError, setNdviError] = useState(false);
+  const [ndviAttempt, setNdviAttempt] = useState(0);
   const [vegetationView, setVegetationView] = useState<VegetationView>('latest');
   const [nbs, setNbs] = useState<NbsDataset | null>(null);
   const [selectedNbsId, setSelectedNbsId] = useState<string | null>(null);
@@ -798,40 +837,57 @@ export function App() {
   const [layers, setLayers] = useState<Set<Layer>>(() => new Set<Layer>(['b3d', 'nbs', 'green', 'water', 'flow']));
   const toggleLayer = (k: Layer) => setLayers(prev => { const n = new Set(prev); n.has(k) ? n.delete(k) : n.add(k); return n; });
 
-  // Load live Freeway 1 + YouBike feeds on mount (powers Today, Twin, and Move) and refresh every 5 min while visible.
+  // Each feed can render as soon as it arrives and has its own request deadline.
   useEffect(() => {
-    const load = async () => {
-      if (document.hidden) return;
-      const [road, yb, nw] = await Promise.allSettled([
-        fetch('/api/live').then(async r => {
-          if (!r.ok) throw new Error('Freeway feed unavailable');
-          const body = await r.json() as Pick<Live, 'road'>;
-          if (!Array.isArray(body.road?.data) || !body.road.meta) throw new Error('Invalid freeway feed');
-          return body;
-        }),
-        fetch('https://apis.youbike.com.tw/json/station-yb2.json').then(r => r.json() as Promise<any[]>),
-        fetch('/api/news').then(r => r.json() as Promise<NewsPayload>),
-      ]);
-      const docks = yb.status === 'fulfilled' && Array.isArray(yb.value) ? parseYouBike(yb.value) : [];
-      setLive({
-        road: road.status === 'fulfilled' ? road.value.road : { data: [], meta: { source: 'Freeway Bureau VD (MOTC)', tier: 'unavailable', asOf: null } },
-        docks: { data: docks, meta: { source: 'YouBike 2.0 station feed', tier: docks.length ? 'live' : 'unavailable', asOf: docks.map(d => d.at).sort().at(-1) ?? null } },
+    const emptyRoad: Live['road'] = { data: [], meta: { source: 'Freeway Bureau VD (MOTC)', tier: 'unavailable', asOf: null } };
+    const emptyDocks: Live['docks'] = { data: [], meta: { source: 'YouBike 2.0 station feed', tier: 'unavailable', asOf: null } };
+    const applyRoad = (road: Live['road']) => setLive(prev => ({ docks: prev?.docks ?? emptyDocks, road }));
+    const applyDocks = (docks: Live['docks']) => setLive(prev => ({ road: prev?.road ?? emptyRoad, docks }));
+    const stopRoad = pollFeed(async signal => {
+      const { road } = await fetchFeed<Pick<Live, 'road'>>('/api/live', signal);
+      if (!Array.isArray(road?.data) || !road.meta) throw new Error('Invalid freeway feed');
+      return road;
+    }, applyRoad, () => applyRoad(emptyRoad));
+    const stopDocks = pollFeed(async signal => {
+      const rows = await fetchFeed<unknown[]>('https://apis.youbike.com.tw/json/station-yb2.json', signal);
+      if (!Array.isArray(rows)) throw new Error('Invalid YouBike feed');
+      const now = Date.now();
+      const data = parseYouBike(rows).filter(d => {
+        const elapsed = now - Date.parse(d.at);
+        return elapsed >= 0 && elapsed < 30 * 60e3;
       });
-      if (nw.status === 'fulfilled' && nw.value?.items) setNews(nw.value);
-    };
-    load();
-    const id = setInterval(load, 300000);
-    document.addEventListener('visibilitychange', load);
-    return () => { clearInterval(id); document.removeEventListener('visibilitychange', load); };
+      return data.length
+        ? { data, meta: { ...emptyDocks.meta, tier: 'live' as const, asOf: data.map(d => d.at).sort().at(-1) ?? null } }
+        : emptyDocks;
+    }, applyDocks, () => applyDocks(emptyDocks));
+    const stopNews = pollFeed(async signal => {
+      const result = await fetchFeed<NewsPayload>('/api/news', signal);
+      if (!Array.isArray(result?.items) || !result.meta || !result.stats) throw new Error('Invalid news feed');
+      return result;
+    }, setNews, () => setNews(prev => prev && { ...prev, meta: { ...prev.meta, tier: 'stale' } }));
+    return () => { stopRoad(); stopDocks(); stopNews(); };
   }, []);
 
   // Heavy Twin layers (eco + Sentinel-2 NDVI grid + NbS field survey) load on first visit to Twin
   useEffect(() => {
     if (lens !== 'twin') return;
     if (!eco) fetch('/data/eco.json').then(r => r.json() as Promise<Eco>).then(setEco).catch(() => {});
-    if (!ndvi) fetch('/data/ndvi.json').then(r => { if (!r.ok) throw new Error('Satellite layer unavailable'); return r.json() as Promise<Ndvi>; }).then(setNdvi).catch(() => {});
     if (!nbs) fetch('/data/nbs.json').then(r => r.json() as Promise<NbsDataset>).then(setNbs).catch(() => {});
-  }, [lens, eco, ndvi, nbs]);
+  }, [lens, eco, nbs]);
+  useEffect(() => {
+    if (lens !== 'twin' || ndvi) return;
+    const controller = new AbortController();
+    setNdviError(false);
+    void fetchFeed<Ndvi>('/data/ndvi.json', controller.signal)
+      .then(dataset => {
+        if (!dataset?.meta?.scenes?.length || !dataset?.latest || !Array.isArray(dataset.grid?.features)) {
+          throw new Error('Invalid satellite layer');
+        }
+        if (!controller.signal.aborted) setNdvi(dataset);
+      })
+      .catch(() => { if (!controller.signal.aborted) setNdviError(true); });
+    return () => controller.abort();
+  }, [lens, ndvi, ndviAttempt]);
   const selectNbs = (id: string) => {
     setSelectedBuildingId(null);
     setSelectedNbsId(id);
@@ -885,17 +941,15 @@ export function App() {
   }, [l]);
 
   useEffect(() => {
-    const loadToday = () =>
-      fetch('/api/today', { cache: 'no-cache' })
-        .then(r => { if (!r.ok) throw new Error('Today feed unavailable'); return r.json() as Promise<Today>; })
-        .then(j => { setToday({ ...j, hourly: j.hourly ?? [], slots: j.slots ?? [], steady: j.steady ?? [], items: j.items ?? [] }); setTodayErr(false); }) // a browser-cached older payload may lack newer fields
-        .catch(() => setTodayErr(true));
-    loadToday();
-    const id = setInterval(loadToday, 300000);
+    const stopToday = pollFeed(async signal => {
+      const j = await fetchFeed<Today>('/api/today', signal, 'no-cache');
+      if (!j?.now || !j.forecastMeta || !Array.isArray(j.items) || !Array.isArray(j.steady)) throw new Error('Invalid Today bulletin');
+      return { ...j, hourly: j.hourly ?? [], slots: j.slots ?? [] };
+    }, j => { setToday(j); setTodayErr(false); }, () => setTodayErr(true));
     fetch('/data/campus.json').then(r => r.json() as Promise<CampusData>).then(setCampus).catch(() => {});
     fetch('/data/solar.json').then(r => r.json()).then(setSolar).catch(() => {});
     fetch('/data/directory.json').then(r => r.json() as Promise<Directory>).then(setDir).catch(() => {});
-    return () => clearInterval(id);
+    return stopToday;
   }, []);
 
   // On phone the map sits under the panel: bring it into view so the action has visible feedback.
@@ -907,7 +961,21 @@ export function App() {
     revealInspector();
   }, [selectedBuildingId]);
   const shownForLayers = useRef(false); // first layer toggle on phone reveals the map once, later ones don't yank the page
-  const showMap = () => { if (window.innerWidth < 900) document.getElementById('map')?.scrollIntoView({ behavior: window.matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth' }); };
+  const mapReturn = useRef<HTMLElement | null>(null);
+  const showMap = (trigger?: HTMLElement) => {
+    if (window.innerWidth >= 900) return;
+    mapReturn.current = trigger ?? (document.activeElement instanceof HTMLElement ? document.activeElement : null);
+    requestAnimationFrame(() => {
+      const region = document.getElementById('map-region');
+      region?.focus({ preventScroll: true });
+      region?.scrollIntoView({ block: 'start', behavior: 'instant' });
+    });
+  };
+  const returnFromMap = () => {
+    const previous = mapReturn.current;
+    if (previous?.isConnected && previous !== document.body) previous.focus();
+    else document.getElementById(`lens-tab-${lens}`)?.focus();
+  };
   const focusBuilding = (id: string) => {
     setSelectedBuildingId(id);
     setQuery('');
@@ -922,7 +990,7 @@ export function App() {
     if (!name || !campus) return;
     const s = campus.stops.features.find(f => f.properties.name === name);
     if (s) {
-      setFocusCoord(prev => ({ coord: s.geometry.coordinates, seq: (prev?.seq ?? 0) + 1 }));
+      setFocusCoord(prev => ({ coord: s.geometry.coordinates, stopRadius: true, seq: (prev?.seq ?? 0) + 1 }));
     }
   };
 
@@ -953,6 +1021,10 @@ export function App() {
       .slice(0, 6);
   }, [query, campus]);
 
+  const openSearchHit = (id: string) => {
+    focusBuilding(id);
+    requestAnimationFrame(() => document.querySelector<HTMLButtonElement>('.inspector .xbtn')?.focus());
+  };
   const tabs = useMemo(() => (['today', 'twin', 'power', 'move', 'find'] as Lens[]), []);
 
   return (
@@ -962,7 +1034,7 @@ export function App() {
           <div className="brand">中央大學 <span>NCU Twin</span></div>
           <div>
             <span className="clock">{clock.date} {clock.hm} TPE</span>
-            <button className="lang" onClick={() => setL(l === 'en' ? 'zh' : 'en')} aria-label="Language">
+            <button className="lang" onClick={() => setL(l === 'en' ? 'zh' : 'en')} aria-label={l === 'en' ? 'Switch to Traditional Chinese' : '切換英文'}>
               {l === 'en' ? <><b>EN</b> / 中</> : <>EN / <b>中</b></>}
             </button>
             <button
@@ -984,9 +1056,18 @@ export function App() {
         </header>
 
         <div className="nav-row">
-          <nav className="tabs" role="tablist">
+          <nav className="tabs" role="tablist" aria-label={l === 'en' ? 'Campus views' : '校園檢視'} onKeyDown={e => {
+            const current = tabs.indexOf(lens);
+            const next = e.key === 'ArrowRight' ? (current + 1) % tabs.length
+              : e.key === 'ArrowLeft' ? (current + tabs.length - 1) % tabs.length
+              : e.key === 'Home' ? 0 : e.key === 'End' ? tabs.length - 1 : null;
+            if (next === null) return;
+            e.preventDefault();
+            setLens(tabs[next]);
+            document.getElementById(`lens-tab-${tabs[next]}`)?.focus();
+          }}>
             {tabs.map((k, i) => (
-              <button key={k} role="tab" aria-keyshortcuts={`Alt+${i + 1}`} aria-selected={lens === k} onClick={() => setLens(k)}>
+              <button key={k} id={`lens-tab-${k}`} role="tab" tabIndex={lens === k ? 0 : -1} aria-controls={`lens-panel-${k}`} aria-keyshortcuts={`Alt+${i + 1}`} aria-selected={lens === k} onClick={() => setLens(k)}>
                 {tr(k, l)}
               </button>
             ))}
@@ -997,18 +1078,27 @@ export function App() {
               className="search"
               value={query}
               onChange={e => setQuery(e.target.value)}
-              onKeyDown={e => { if (e.key === 'Escape') setQuery(''); }}
-              placeholder={l === 'en' ? 'Jump to building…' : '快速跳至建物…'}
+              onKeyDown={e => {
+                if (e.key === 'Escape') setQuery('');
+                if (e.key === 'Enter' && !e.nativeEvent.isComposing && searchHits.length) {
+                  e.preventDefault();
+                  openSearchHit(searchHits[0].properties.id);
+                }
+              }}
+              placeholder={l === 'en' ? 'Search mapped buildings…' : '搜尋有地圖的建物…'}
               aria-label={l === 'en' ? 'Find campus building' : '搜尋校內建物'}
             />
           </div>
         </div>
 
+        {query.trim() && campus && !searchHits.length && (
+          <p className="note" role="status">{l === 'en' ? 'No mapped building matches.' : '找不到符合的地圖建物。'}</p>
+        )}
         {searchHits.length > 0 && (
           <ul className="search-hits">
             {searchHits.map(f => (
               <li key={f.properties.id}>
-                <button onClick={() => focusBuilding(f.properties.id)}>
+                <button onClick={() => openSearchHit(f.properties.id)}>
                   <span>{f.properties.name}{(BUILDING_IDENTITIES.get(f.properties.id)?.en ?? f.properties.name_en) && ` · ${BUILDING_IDENTITIES.get(f.properties.id)?.en ?? f.properties.name_en}`}</span>
                   <small>{f.properties.area_m2} m²{f.properties.kwp ? ` · ${Math.round(f.properties.kwp)} kWp` : ''}</small>
                 </button>
@@ -1035,13 +1125,29 @@ export function App() {
             dir={dir}
             inPortfolio={portfolioIds.has(selectedBuilding.properties.id)}
             onTogglePortfolio={togglePortfolio}
-            onClose={() => setSelectedBuildingId(null)}
+            onClose={() => {
+              setSelectedBuildingId(null);
+              document.querySelector<HTMLInputElement>('.search-wrap input')?.focus();
+            }}
             l={l}
           />
         )}
 
+        {tabs.filter(k => k !== lens).map(k => (
+          <div key={k} id={`lens-panel-${k}`} role="tabpanel" aria-labelledby={`lens-tab-${k}`} hidden />
+        ))}
+        <div id={`lens-panel-${lens}`} role="tabpanel" aria-labelledby={`lens-tab-${lens}`}>
+        {(lens === 'today' || lens === 'twin') && (
+          <button className="tomap" onClick={e => showMap(e.currentTarget)}>{l === 'en' ? 'Campus map ↓' : '校園地圖 ↓'}</button>
+        )}
         {lens === 'today' && (
           <TodayLens t={today} err={todayErr} campus={campus} live={live} news={news} onSelectBuilding={focusBuilding} l={l} />
+        )}
+        {lens === 'twin' && ndviError && (
+          <div className="feed-notice">
+            <p role="status">{l === 'en' ? 'Satellite comparison unavailable.' : '衛星影像比較暫時無法載入。'}</p>
+            <button onClick={() => setNdviAttempt(n => n + 1)}>{l === 'en' ? 'Retry' : '重試'}</button>
+          </div>
         )}
         {lens === 'twin' && (
           <TwinLens
@@ -1061,7 +1167,7 @@ export function App() {
             l={l}
           />
         )}
-        {lens === 'find' && <FindLens dir={dir} onFocusBuilding={id => { focusBuilding(id); showMap(); }} l={l} />}
+        {lens === 'find' && <FindLens dir={dir} onFocusBuilding={(id, trigger) => { focusBuilding(id); showMap(trigger); }} l={l} />}
         {lens === 'power' && (
           <PowerLens
             today={today}
@@ -1077,12 +1183,17 @@ export function App() {
           <MoveLens
             clock={clock}
             selectedStopName={selectedStopName}
-            onSelectStop={focusStop}
+            onSelectStop={(name, trigger) => {
+              focusStop(name);
+              if (selectedStopName !== name) showMap(trigger);
+            }}
             live={live}
             onFocusCoord={coord => { setFocusCoord(prev => ({ coord, seq: (prev?.seq ?? 0) + 1 })); showMap(); }}
             l={l}
           />
         )}
+
+        </div>
 
         <p className="note">
           {l === 'en'
@@ -1092,7 +1203,8 @@ export function App() {
         </p>
       </section>
 
-      <div className="map-col">
+      <div className="map-col" id="map-region" tabIndex={-1} role="region" aria-label={l === 'en' ? 'Campus map' : '校園地圖'}>
+        <button className="map-return" onClick={returnFromMap}>{l === 'en' ? '↑ Back to campus details' : '↑ 返回校園資訊'}</button>
         <MapBoundary l={l}>
           <Suspense fallback={<div id="map" className="map map-loading" role="status">{l === 'en' ? 'Loading map…' : '載入地圖中…'}</div>}>
             <CampusMap
