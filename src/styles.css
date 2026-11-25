@@ -340,3 +340,4 @@ details.cat[open] summary::after { content: '⌄'; }
   .mapctl { position: relative; inset: auto; grid-area: 1 / 2; flex-wrap: wrap; justify-self: end; }
   .legend { position: relative; inset: auto; grid-area: 1 / 1; justify-self: start; max-width: min(100%, 58ch); }
 }
+.layer-key { display: block; margin-top: 2px; }
