@@ -38,3 +38,11 @@ To refresh the [ODbL source geometry](https://www.openstreetmap.org/copyright), 
 curl --fail --compressed 'https://api.openstreetmap.org/api/0.6/map?bbox=121.1845,24.9648,121.1971,24.972' -o /tmp/ncu-campus.osm
 python3 pipeline/campus-layers.py /tmp/ncu-campus.osm --as-of "$(date +%F)"
 ```
+
+## Zhongli air quality · 中壢空氣品質
+
+Today shows the Ministry of Environment's published hourly AQI for Zhongli's traffic station, about 3.5 km from the campus centre. The monitoring website uses station ID 12. The open-data catalogue uses ID 68. The portal file is keyed to the Taiwan sampling hour. The reader checks the station name, county and separately embedded publication hour before accepting the value. The campus PM2.5 estimate is shown separately.
+
+The five-minute Worker schedule checks whether a newly published hour is due, with a 15-minute publication allowance and failure retry interval. A station reading expires after 95 minutes. Health reports the observation time, most recent attempt, and most recent successful ingestion separately. The public monitoring JSON requires no project credential.
+
+[MOENV monitoring network](https://airtw.moenv.gov.tw/ENG/default.aspx) · [MOENV station catalogue](https://data.moenv.gov.tw/dataset/detail/AQX_P_07)

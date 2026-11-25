@@ -1,5 +1,7 @@
 // Edge: static assets + /api/today. Fetches open feeds, wraps each in {source, tier, asOf}, runs the Today engine.
 import { buildToday, type Feed, type Forecast, type Air } from '../src/shared/today';
+import { stationFeed } from '../src/shared/station-aqi';
+import { readStationAqi, updateStationAqi } from './station-aqi';
 import { parseVDLive, type Live } from '../src/shared/live';
 import {
   NEWS_FEEDS,
@@ -83,6 +85,7 @@ function secure(res: Response) {
 
 export default {
   async scheduled(_e: ScheduledController, env: Env, ctx: ExecutionContext) {
+    ctx.waitUntil(updateStationAqi(env.LIVE, _e.scheduledTime));
     // Record why a pull failed so /api/live can say so; the last good reading stays in place.
     ctx.waitUntil(pullRoad(env).catch(e => env.LIVE.put('road_err', `${new Date().toISOString()} ${String((e as Error)?.message ?? e).slice(0, 160)}`)));
     // Refresh NCU & Taoyuan news corpus every 15 min (on 00, 15, 30, 45)
@@ -211,11 +214,12 @@ async function pullRoad(env: Env) {
 /** Operational loop health check: reports live freshness & counts for KV-backed loops without leaking secrets. */
 async function health(env: Env): Promise<Response> {
   const nowMs = Date.now();
-  const [roadRaw, roadErr, newsRaw, newsAttempt] = await Promise.all([
+  const [roadRaw, roadErr, newsRaw, newsAttempt, aqi] = await Promise.all([
     env.LIVE.get('road', { cacheTtl: 30 }),
     env.LIVE.get('road_err', { cacheTtl: 30 }),
     env.LIVE.get('news_db', { cacheTtl: 30 }),
     env.LIVE.get('news_attempt', { cacheTtl: 30 }),
+    readStationAqi(env.LIVE),
   ]);
   const roadAll = roadSnapshot(roadRaw, nowMs);
   const roadAsOf = roadAll.map(f => f.at).sort().at(-1) ?? null;
@@ -229,6 +233,7 @@ async function health(env: Env): Promise<Response> {
   const newsState = newsTier(newsStore, nowMs);
   const newsFresh = newsState === 'live';
 
+  const aqiMeta = stationFeed(aqi?.observation ?? null, nowMs).meta;
   const status = roadFresh && newsFresh ? 'ok' : 'degraded';
   return new Response(
     JSON.stringify({
@@ -236,6 +241,8 @@ async function health(env: Env): Promise<Response> {
       checkedAt: new Date(nowMs).toISOString(),
       build: env.BUILD ?? null,
       loops: {
+        aqi: { tier: aqiMeta.tier, asOf: aqiMeta.asOf, lastAttemptAt: aqi?.lastAttemptAt ?? null,
+          lastSuccessAt: aqi?.lastSuccessAt ?? null, outcome: aqi?.outcome ?? null, httpStatus: aqi?.httpStatus ?? null },
         road: { tier: roadFresh ? 'live' : 'stale', asOf: roadAsOf, ageMin: roadAgeMin, detectors: roadAll.length },
         news: { tier: newsState, asOf: newsAsOf, lastAttemptAt: Number.isFinite(elapsed(newsAttempt, nowMs)) ? newsAttempt : null, ageMin: newsAgeMin, articles: newsStore?.items?.length ?? 0 },
       },
@@ -248,10 +255,12 @@ async function health(env: Env): Promise<Response> {
 /** Last good detector reading. Its own collection time travels with it, so the page shows its real age. */
 async function live(env: Env): Promise<Response> {
   const now = Date.now();
-  const all = roadSnapshot(await env.LIVE.get('road', { cacheTtl: 60 }), now);
+  const [road, aqi] = await Promise.all([env.LIVE.get('road', { cacheTtl: 60 }), readStationAqi(env.LIVE)]);
+  const all = roadSnapshot(road, now);
   // After expiry, suppress stale speeds and retain the time of the last observation.
   const data = all.filter(f => elapsed(f.at, now) < ROAD_STALE_MS);
-  const body: Pick<Live, 'road'> = {
+  const body: Pick<Live, 'road' | 'stationAqi'> = {
+    stationAqi: stationFeed(aqi?.observation ?? null, now),
     road: { data, meta: { source: ROAD_SRC, tier: data.length ? 'live' : all.length ? 'stale' : 'unavailable', asOf: (data.length ? data : all).map(f => f.at).sort().at(-1) ?? null } },
   };
   return new Response(JSON.stringify(body), { headers: { 'content-type': 'application/json', 'cache-control': 'public, max-age=60' } });
