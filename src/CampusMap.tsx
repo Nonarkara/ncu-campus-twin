@@ -1,5 +1,6 @@
-import { useEffect, useRef, useState } from 'react';
-import type { Ndvi, VegetationView } from './TwinLens';
+import { useEffect, useMemo, useRef, useState } from 'react';
+import type { Layer, Ndvi, VegetationView } from './TwinLens';
+import { makeWalkers, walkerFeatures, type CampusLayers, type ParkingKind } from './shared/campus-layers';
 import type { Appearance } from './shared/appearance';
 import workerUrl from 'maplibre-gl/dist/maplibre-gl-worker.mjs?worker&url';
 import {
@@ -24,17 +25,23 @@ import { DOCK_EN } from './shared/live';
 setWorkerUrl(workerUrl);
 
 export type Lens = 'today' | 'twin' | 'power' | 'move' | 'find';
-export type TwinLayer = 'green' | 'water' | 'bio' | 'flow' | 'b3d' | 'nbs';
 export interface TwinData {
   eco: any;
+  campusLayers: CampusLayers | null;
   ndvi: Ndvi | null;
   vegetationView: VegetationView;
   live: import('./shared/live').Live | null;
   nbs: import('./NbsInspector').NbsDataset | null;
   selectedNbsId: string | null;
   onSelectNbs: (id: string) => void;
-  layers: Set<TwinLayer>;
+  layers: Set<Layer>;
 }
+const PARKING_NAMES: Record<ParkingKind, [string, string]> = {
+  parking: ['Car parking', '汽車停車區'],
+  parking_space: ['Parking space', '車位'],
+  bicycle_parking: ['Bicycle parking', '自行車停車區'],
+  motorcycle_parking: ['Motorcycle parking', '機車停車區'],
+};
 const BOUNDS: [number, number, number, number] = [121.1849, 24.9651, 121.1968, 24.9717]; // OSM relation/18727079 bbox
 // Global style state changes paint expressions without rebuilding the canvas or its sources.
 const tone = (dark: string, light: string): ExpressionSpecification =>
@@ -118,6 +125,10 @@ export function CampusMap({
   const [photo, setPhoto] = useState(false);
   const [showLabels, setShowLabels] = useState(true);
   const [hoverText, setHoverText] = useState<string | null>(null);
+  const [playing, setPlaying] = useState(() => !window.matchMedia('(prefers-reduced-motion: reduce)').matches);
+  const simSeconds = useRef(0);
+  const walkers = useMemo(() => twin.campusLayers ? makeWalkers(twin.campusLayers.paths) : [], [twin.campusLayers]);
+  const showStudents = lens === 'twin' && twin.layers.has('students');
 
   const onSelectBuildingRef = useRef(onSelectBuilding);
   const onSelectStopRef = useRef(onSelectStop);
@@ -217,7 +228,7 @@ export function CampusMap({
       });
 
       // Twin lens: Sentinel-2 NDVI grid, water network, wildlife pins, live docks, detectors, and NbS field dots
-      for (const id of ['ndvi', 'water', 'bio', 'docks', 'vd', 'nbs']) m.addSource(id, { type: 'geojson', data: EMPTY_FC });
+      for (const id of ['ndvi', 'water', 'bio', 'docks', 'vd', 'nbs', 'students', 'parking']) m.addSource(id, { type: 'geojson', data: EMPTY_FC });
       m.addLayer({ id: 'ndvi', type: 'fill', source: 'ndvi', layout: { visibility: 'none' }, paint: {
         'fill-color': ndviPaint('latest') } });
       m.addLayer({ id: 'water-area', type: 'fill', source: 'water', filter: ['==', ['geometry-type'], 'Polygon'], layout: { visibility: 'none' },
@@ -244,6 +255,42 @@ export function CampusMap({
           'fill-extrusion-height': ['get', 'height_m'],
           'fill-extrusion-opacity': 0.92,
         } });
+      m.addLayer({
+        id: 'parking-area', type: 'fill', source: 'parking', filter: ['==', ['geometry-type'], 'Polygon'],
+        layout: { visibility: 'none' }, paint: { 'fill-color': ink(0.2) },
+      });
+      m.addLayer({
+        id: 'parking-outline', type: 'line', source: 'parking', filter: ['==', ['geometry-type'], 'Polygon'],
+        layout: { visibility: 'none' }, paint: { 'line-color': INK, 'line-width': 1, 'line-dasharray': [3, 2] },
+      });
+      m.addLayer({
+        id: 'parking-point', type: 'circle', source: 'parking', filter: ['==', ['geometry-type'], 'Point'],
+        layout: { visibility: 'none' },
+        paint: { 'circle-radius': 5, 'circle-color': GROUND, 'circle-stroke-color': INK, 'circle-stroke-width': 1 },
+      });
+      m.addLayer({
+        id: 'parking-label', type: 'symbol', source: 'parking',
+        layout: {
+          visibility: 'none',
+          'text-field': ['match', ['get', 'kind'], 'bicycle_parking', 'B', 'motorcycle_parking', 'M', 'P'],
+          'text-font': ['Noto Sans Regular'], 'text-size': 12, 'text-padding': 1,
+        },
+        paint: { 'text-color': INK, 'text-halo-color': GROUND, 'text-halo-width': 2 },
+      });
+      m.addLayer({
+        id: 'student-model', type: 'fill-extrusion', source: 'students', minzoom: 17.7,
+        filter: ['==', ['geometry-type'], 'Polygon'], layout: { visibility: 'none' },
+        paint: {
+          'fill-extrusion-base': ['get', 'base'], 'fill-extrusion-height': ['get', 'height'],
+          'fill-extrusion-color': INK,
+        },
+      });
+      m.addLayer({
+        id: 'student-location', type: 'circle', source: 'students',
+        filter: ['==', ['geometry-type'], 'Point'], layout: { visibility: 'none' },
+        paint: { 'circle-radius': ['interpolate', ['linear'], ['zoom'], 15, 3, 19, 1.7],
+          'circle-color': INK, 'circle-stroke-color': GROUND, 'circle-stroke-width': 1 },
+      });
       m.addLayer({ id: 'bio', type: 'circle', source: 'bio', layout: { visibility: 'none' },
         paint: { 'circle-radius': 3.5, 'circle-color': GROUND, 'circle-stroke-color': ink(0.9), 'circle-stroke-width': 1.5 } });
       m.addLayer({ id: 'docks', type: 'circle', source: 'docks', layout: { visibility: 'none' },
@@ -350,6 +397,14 @@ export function CampusMap({
         m.on('mouseleave', id, () => setHoverText(null));
         // touch has no hover: a tap shows the same line
         m.on('click', id, (e: any) => { const f = e.features?.[0]; if (f) setHoverText(JSON.stringify({ kind: id, p: f.properties })); });
+      }
+      for (const id of ['parking-area', 'parking-point', 'parking-label']) {
+        const identify = (e: { features?: { properties: unknown }[] }) => {
+          if (e.features?.[0]) setHoverText(JSON.stringify({ kind: 'parking', p: e.features[0].properties }));
+        };
+        m.on('mousemove', id, identify);
+        m.on('click', id, identify);
+        m.on('mouseleave', id, () => setHoverText(null));
       }
       m.on('mouseenter', 'nbs', () => { m.getCanvas().style.cursor = 'pointer'; });
       m.on('mouseleave', 'nbs', () => { m.getCanvas().style.cursor = ''; setHoverText(null); });
@@ -547,6 +602,7 @@ export function CampusMap({
     const set = (id: string, d: any) => (m.getSource(id) as GeoJSONSource | undefined)?.setData(d ?? EMPTY_FC);
     set('ndvi', twin.ndvi?.grid);
     set('water', twin.eco?.water);
+    set('parking', twin.campusLayers?.parking);
     set('bio', twin.eco?.bio.pins);
     set('docks', { type: 'FeatureCollection', features: (twin.live?.docks.data ?? []).map(d => ({ type: 'Feature', properties: d, geometry: { type: 'Point', coordinates: [d.lon, d.lat] } })) });
     set('vd', { type: 'FeatureCollection', features: (twin.live?.road.data ?? []).map(f => ({ type: 'Feature', properties: { ...f, label: f.label.join(' / ') }, geometry: { type: 'Point', coordinates: [f.lon, f.lat] } })) });
@@ -560,7 +616,7 @@ export function CampusMap({
           geometry: { type: 'Point', coordinates: it.coord! },
         })),
     });
-  }, [ready, twin.ndvi, twin.eco, twin.live, twin.nbs]);
+  }, [ready, twin.ndvi, twin.eco, twin.live, twin.nbs, twin.campusLayers]);
 
   useEffect(() => {
     if (ready) map.current?.setPaintProperty('ndvi', 'fill-color', ndviPaint(twin.vegetationView));
@@ -570,13 +626,15 @@ export function CampusMap({
   useEffect(() => {
     const m = map.current;
     if (!m || !ready) return;
-    const on = (k: TwinLayer) => lens === 'twin' && twin.layers.has(k);
+    const on = (k: Layer) => lens === 'twin' && twin.layers.has(k);
     const vis = (id: string, v: boolean) => m.setLayoutProperty(id, 'visibility', v ? 'visible' : 'none');
     vis('ndvi', on('green'));
     vis('water-area', on('water')); vis('water-line', on('water'));
     vis('bio', on('bio'));
     vis('docks', on('flow')); vis('vd', on('flow'));
     vis('nbs', on('nbs'));
+    for (const id of ['parking-area', 'parking-outline', 'parking-point', 'parking-label']) vis(id, on('parking'));
+    vis('student-model', on('students')); vis('student-location', on('students'));
     vis('bld-3d', on('b3d'));
     if (m.getLayer('nbs')) {
       const selNbs: ExpressionSpecification = twin.selectedNbsId ? ['==', ['get', 'id'], twin.selectedNbsId] : ['==', ['get', 'id'], '__none__'];
@@ -593,6 +651,26 @@ export function CampusMap({
       if (m.getPitch() > 0 || m.getBearing() !== 0) m.easeTo({ pitch: 0, bearing: 0, duration: reduced ? 0 : 300 });
     }
   }, [lens, ready, twin.layers, twin.selectedNbsId]);
+
+  useEffect(() => {
+    const m = map.current;
+    if (!m || !ready || !showStudents) return;
+    const source = m.getSource<GeoJSONSource>('students');
+    if (!source) return;
+    const draw = () => source.setData(walkerFeatures(walkers, simSeconds.current));
+    draw();
+    if (!playing || !walkers.length) return;
+    let last = performance.now();
+    const timer = setInterval(() => {
+      const now = performance.now();
+      const step = (now - last) / 1000;
+      last = now;
+      if (document.hidden || m.isMoving()) return;
+      simSeconds.current += Math.min(0.25, step);
+      draw();
+    }, 100);
+    return () => clearInterval(timer);
+  }, [ready, showStudents, walkers, playing]);
 
   // Smoothly focus on selected building or stop (respects reduced motion)
   useEffect(() => {
@@ -620,8 +698,8 @@ export function CampusMap({
   };
 
   let legend: string;
-  if (hoverText) {
-    const parsed = JSON.parse(hoverText);
+  const parsed = hoverText ? JSON.parse(hoverText) : null;
+  if (parsed && (parsed.kind !== 'parking' || lens === 'twin' && twin.layers.has('parking'))) {
     if (parsed.kind === 'docks') {
       const d = parsed.p;
       legend = `YouBike · ${l === 'en' ? DOCK_EN[d.id] ?? d.en : d.zh} · ${d.bikes} ${l === 'en' ? 'bikes' : '車'} · ${d.free}/${d.capacity} ${l === 'en' ? 'docks free' : '空位'}`;
@@ -630,6 +708,11 @@ export function CampusMap({
       legend = `${l === 'en' ? lab[0] : lab[1]} · ${f.speed ?? '—'} km/h · ${Number(f.vph).toLocaleString('en-US')} ${l === 'en' ? 'veh/h' : '輛/時'} · Freeway Bureau VD`;
     } else if (parsed.kind === 'bio') {
       legend = `${parsed.p.vn && parsed.p.vn !== parsed.p.sp ? parsed.p.vn + ' · ' : ''}${parsed.p.sp} · ${parsed.p.y} · ±${parsed.p.u} m · GBIF`;
+    } else if (parsed.kind === 'parking') {
+      const p = parsed.p;
+      const name = p.name || PARKING_NAMES[p.kind as ParkingKind]?.[l === 'en' ? 0 : 1];
+      const capacity = p.capacity != null ? `${p.capacity} ${l === 'en' ? 'mapped spaces' : '登錄車位'}` : (l === 'en' ? 'capacity unknown' : '容量未登錄');
+      legend = `${name} · ${capacity} · ${p.access ? `${l === 'en' ? 'access tag' : '通行標籤'}: ${p.access} · ` : ''}OSM ${p.osm}`;
     } else if (parsed.kind === 'nbs') {
       legend = `NbS · ${l === 'en' ? parsed.p.title_en : parsed.p.title_zh} · ${l === 'en' ? 'click to inspect photo' : '點選檢視現地照片'}`;
     } else if (parsed.kind === 'stop') {
@@ -675,9 +758,24 @@ export function CampusMap({
         <button aria-pressed={!photo} onClick={() => setPhoto(false)}>{l === 'en' ? 'Plan' : '平面'}</button>
         <button aria-pressed={photo} onClick={() => setPhoto(true)}>{l === 'en' ? 'Photo' : '航照'}</button>
         <button aria-pressed={showLabels} onClick={() => setShowLabels(s => !s)}>{l === 'en' ? 'Labels' : '標註'}</button>
+        {showStudents && (
+          <button onClick={() => setPlaying(p => !p)} aria-label={playing
+            ? (l === 'en' ? 'Pause simulated students' : '暫停學生模擬')
+            : (l === 'en' ? 'Play simulated students' : '播放學生模擬')}>
+            {playing ? (l === 'en' ? 'Pause' : '暫停') : (l === 'en' ? 'Play' : '播放')}
+          </button>
+        )}
         <button onClick={resetView} aria-label={l === 'en' ? 'Reset map view' : '重置地圖視角'}>{l === 'en' ? 'Reset' : '重置'}</button>
       </div>
-      <div className="legend">{legend}</div>
+      <div className="legend">{legend}
+        {lens === 'twin' && twin.layers.has('parking') && (
+          <span className="layer-key">{l === 'en' ? 'OSM parking · P car · M motorcycle · B bicycle' : 'OSM 停車 · P 汽車 · M 機車 · B 自行車'}
+            {twin.campusLayers && ` · ${twin.campusLayers.meta.asOf}`}</span>
+        )}
+        {showStudents && (
+          <span className="layer-key">{l === 'en' ? 'Simulated students · dots locate walkers · zoom for 1.7 m figures' : '模擬學生・點為行人位置・放大可見 1.7 公尺人像'}</span>
+        )}
+      </div>
       <div className="map-surface" ref={el} />
     </div>
   );

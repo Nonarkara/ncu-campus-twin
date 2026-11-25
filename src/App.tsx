@@ -1,3 +1,4 @@
+import type { CampusLayers } from './shared/campus-layers';
 import { initialAppearance, saveAppearance } from './shared/appearance';
 import { Fragment, lazy, Suspense, useEffect, useMemo, useRef, useState } from 'react';
 import type { Today, Meta } from './shared/today';
@@ -825,6 +826,9 @@ export function App() {
   const [focusCoord, setFocusCoord] = useState<{ coord: [number, number]; seq: number; stopRadius?: true } | null>(null);
   const [query, setQuery] = useState('');
   const [eco, setEco] = useState<Eco | null>(null);
+  const [campusLayers, setCampusLayers] = useState<CampusLayers | null>(null);
+  const [layerError, setLayerError] = useState(false);
+  const [layerAttempt, setLayerAttempt] = useState(0);
   const [ndvi, setNdvi] = useState<Ndvi | null>(null);
   const [ndviError, setNdviError] = useState(false);
   const [ndviAttempt, setNdviAttempt] = useState(0);
@@ -888,6 +892,20 @@ export function App() {
       .catch(() => { if (!controller.signal.aborted) setNdviError(true); });
     return () => controller.abort();
   }, [lens, ndvi, ndviAttempt]);
+  useEffect(() => {
+    if (lens !== 'twin' || campusLayers) return;
+    const controller = new AbortController();
+    setLayerError(false);
+    void fetchFeed<CampusLayers>('/data/campus-layers.json', controller.signal)
+      .then(data => {
+        if (!data?.meta?.asOf || !Array.isArray(data.parking?.features) || !Array.isArray(data.paths?.features)) {
+          throw new Error('Invalid campus layers');
+        }
+        if (!controller.signal.aborted) setCampusLayers(data);
+      })
+      .catch(() => { if (!controller.signal.aborted) setLayerError(true); });
+    return () => controller.abort();
+  }, [lens, campusLayers, layerAttempt]);
   const selectNbs = (id: string) => {
     setSelectedBuildingId(null);
     setSelectedNbsId(id);
@@ -896,8 +914,8 @@ export function App() {
     revealInspector();
   };
   const twin = useMemo(
-    () => ({ eco, ndvi, vegetationView, live, nbs, selectedNbsId, onSelectNbs: selectNbs, layers }),
-    [eco, ndvi, vegetationView, live, nbs, selectedNbsId, layers],
+    () => ({ campusLayers, eco, ndvi, vegetationView, live, nbs, selectedNbsId, onSelectNbs: selectNbs, layers }),
+    [campusLayers, eco, ndvi, vegetationView, live, nbs, selectedNbsId, layers],
   );
 
   useEffect(() => {
@@ -1152,6 +1170,9 @@ export function App() {
         {lens === 'twin' && (
           <TwinLens
             eco={eco}
+            campusLayers={campusLayers}
+            layerError={layerError}
+            onRetryLayers={() => setLayerAttempt(n => n + 1)}
             ndvi={ndvi}
             vegetationView={vegetationView}
             onVegetationView={setVegetationView}
@@ -1162,7 +1183,14 @@ export function App() {
             selectedNbsId={selectedNbsId}
             onSelectNbs={selectNbs}
             layers={layers}
-            onToggle={k => { toggleLayer(k); if (!shownForLayers.current) { shownForLayers.current = true; showMap(); } }}
+            onToggle={(k, trigger) => {
+              toggleLayer(k);
+              const newOverlay = k === 'students' || k === 'parking';
+              if (newOverlay ? !layers.has(k) && !!campusLayers : !shownForLayers.current) {
+                shownForLayers.current = true;
+                showMap(trigger);
+              }
+            }}
             onFocusCoord={coord => { setFocusCoord(prev => ({ coord, seq: (prev?.seq ?? 0) + 1 })); showMap(); }}
             l={l}
           />

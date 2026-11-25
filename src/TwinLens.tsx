@@ -1,5 +1,6 @@
 // Twin lens: what the campus holds and what flows through it — green cover, water, wildlife, docks, roads, built volume.
 // Every row carries its source, tier and age; a feed that fails renders no row.
+import { STUDENT_HEIGHT, STUDENT_LIMIT, WALK_SPEED, type CampusLayers } from './shared/campus-layers';
 import { Fragment } from 'react';
 import type { Meta } from './shared/today';
 import type { Live } from './shared/live';
@@ -11,7 +12,7 @@ import { NbsGallery, type NbsDataset } from './NbsInspector';
 import type { FeatureCollection, Polygon } from 'geojson';
 
 type L = 'en' | 'zh';
-export type Layer = 'green' | 'water' | 'bio' | 'flow' | 'b3d' | 'nbs';
+export type Layer = 'green' | 'water' | 'bio' | 'flow' | 'b3d' | 'nbs' | 'students' | 'parking';
 export const LAYERS: { k: Layer; t: [string, string] }[] = [
   { k: 'b3d', t: ['3D', '立體'] },
   { k: 'nbs', t: ['NbS', '自然解方'] },
@@ -19,6 +20,8 @@ export const LAYERS: { k: Layer; t: [string, string] }[] = [
   { k: 'water', t: ['Water', '水系'] },
   { k: 'flow', t: ['Flow', '交通'] },
   { k: 'bio', t: ['Wildlife', '物種'] },
+  { k: 'students', t: ['Students · sim', '學生・模擬'] },
+  { k: 'parking', t: ['Parking', '停車'] },
 ];
 
 const pick = (p: readonly [string, string], l: L) => (l === 'en' ? p[0] : p[1]);
@@ -72,11 +75,12 @@ export interface Ndvi {
   grid: FeatureCollection<Polygon, { v: number; p: number; d: number; shift?: Variation; repeated?: Variation | null }>;
 }
 
-export function TwinLens({ eco, ndvi, vegetationView, onVegetationView, live, campus, dir, nbs, selectedNbsId, onSelectNbs, layers, onToggle, onFocusCoord, l }: {
+export function TwinLens({ eco, campusLayers, layerError, onRetryLayers, ndvi, vegetationView, onVegetationView, live, campus, dir, nbs, selectedNbsId, onSelectNbs, layers, onToggle, onFocusCoord, l }: {
+  campusLayers: CampusLayers | null; layerError: boolean; onRetryLayers: () => void;
   eco: Eco | null; ndvi: Ndvi | null; vegetationView: VegetationView; onVegetationView: (view: VegetationView) => void;
   live: Live | null; campus: CampusData | null; dir: Directory | null;
   nbs: NbsDataset | null; selectedNbsId: string | null; onSelectNbs: (id: string) => void;
-  layers: Set<Layer>; onToggle: (k: Layer) => void; onFocusCoord?: (coord: [number, number]) => void; l: L;
+  layers: Set<Layer>; onToggle: (k: Layer, trigger: HTMLButtonElement) => void; onFocusCoord?: (coord: [number, number]) => void; l: L;
 }) {
   const delta = ndvi ? Math.round((ndvi.green_share_now - ndvi.green_share_prev) * 10) / 10 : null;
   const ndviShift = ndvi?.[vegetationView];
@@ -92,8 +96,6 @@ export function TwinLens({ eco, ndvi, vegetationView, onVegetationView, live, ca
   const ecoMeta = eco ? { source: 'OpenStreetMap', tier: 'snapshot', asOf: eco.meta.fetchedAt ?? null } : null;
   const main = live?.road.data.filter(f => f.kind === 'main') ?? [];
   const exits = live?.road.data.filter(f => f.kind === 'exit') ?? [];
-  const lots = eco?.parking.features.filter(f => f.properties.k !== 'bicycle_rental') ?? [];
-  const cap = lots.filter(f => f.properties.capacity !== null);
   const seats = (dir?.categories.flatMap(c => c.entries) ?? [])
     .filter(e => e.capacity?.unit === 'seats' && !(e.note ?? '').startsWith('STALE')).sort((a, b) => b.capacity!.value - a.capacity!.value);
   const bioMeta = eco ? { source: 'GBIF', tier: 'observed', asOf: `${eco.bio.years[0]}–${eco.bio.years[1]}` } : null;
@@ -120,9 +122,22 @@ export function TwinLens({ eco, ndvi, vegetationView, onVegetationView, live, ca
 
       <div className="chips" role="group" aria-label={l === 'en' ? 'Map layers' : '圖層'}>
         {LAYERS.map(x => (
-          <button key={x.k} aria-pressed={layers.has(x.k)} onClick={() => onToggle(x.k)}>{pick(x.t, l)}</button>
+          <button key={x.k} aria-pressed={layers.has(x.k)} onClick={e => onToggle(x.k, e.currentTarget)}>{pick(x.t, l)}</button>
         ))}
       </div>
+      {layerError && (
+        <div className="feed-notice">
+          <p role="status">{l === 'en' ? 'Student paths and parking unavailable.' : '學生路徑與停車圖層暫時無法載入。'}</p>
+          <button onClick={onRetryLayers}>{l === 'en' ? 'Retry' : '重試'}</button>
+        </div>
+      )}
+      {campusLayers && layers.has('students') && (
+        <p className="meta">
+          {l === 'en'
+            ? `${Math.min(STUDENT_LIMIT, campusLayers.paths.features.length)} simulated walkers · ${STUDENT_HEIGHT} m tall · ${WALK_SPEED} m/s · mapped paths, no observed headcount`
+            : `${Math.min(STUDENT_LIMIT, campusLayers.paths.features.length)} 位模擬行人・高 ${STUDENT_HEIGHT} 公尺・每秒 ${WALK_SPEED} 公尺・依圖資路徑，無實測人數`}
+        </p>
+      )}
       {ndvi && ndviShift && (
         <div className="ndvi-bar">
           {repeatScene && layers.has('green') && (
@@ -247,12 +262,17 @@ export function TwinLens({ eco, ndvi, vegetationView, onVegetationView, live, ca
             </dd>
           </div>
         )}
-        {eco && ecoMeta && (
+        {campusLayers && (
           <div>
             <dt>{l === 'en' ? 'Parking' : '停車區'}</dt>
             <dd>
-              {lots.length} {l === 'en' ? 'areas' : '處'} · {n0(cap.reduce((s, f) => s + (f.properties.capacity ?? 0), 0))} {l === 'en' ? 'bike spaces' : '自行車位'}
-              <small><M m={ecoMeta} l={l} /></small>
+              {campusLayers.parking.features.length} {l === 'en' ? 'mapped places' : '處圖資紀錄'}
+              <small>
+                OpenStreetMap · {campusLayers.meta.asOf} · {l === 'en' ? 'mapped capacity:' : '登錄容量：'}{' '}
+                {n0(campusLayers.parking.features.reduce((sum, feature) => sum +
+                  (feature.properties.kind === 'bicycle_parking' ? feature.properties.capacity ?? 0 : 0), 0))}
+                {' '}{l === 'en' ? 'bicycle spaces at tagged sites' : '個自行車位（有標註者）'}
+              </small>
             </dd>
           </div>
         )}
