@@ -1,3 +1,4 @@
+import { AQI_MONITOR, stationFeed, ZHONGLI_STATION } from './shared/station-aqi';
 import type { CampusLayers } from './shared/campus-layers';
 import { initialAppearance, saveAppearance } from './shared/appearance';
 import { Fragment, lazy, Suspense, useEffect, useMemo, useRef, useState } from 'react';
@@ -284,6 +285,9 @@ function TodayLens({
 
   // Live operational alerts from Freeway 1 & YouBike (only when live feeds report an actual threshold breach)
   const liveItems = [...t.items];
+  const station = live?.stationAqi;
+  const aqiMeta = station && stationFeed(station.data, Date.now()).meta;
+  const aqiKm = (haversineMeters([121.1916, 24.9684], ZHONGLI_STATION) / 1000).toFixed(1);
   const mainRoad = live?.road.data.filter(f => f.kind === 'main') ?? [];
   const slowRoad = mainRoad.filter(f => f.speed !== null && f.speed < SLOW_KMH);
   if (slowRoad.length > 0 && live) {
@@ -388,6 +392,24 @@ function TodayLens({
 
       <h2 className="h">{tr('steady', l)}</h2>
       <ul className="steady">
+        {aqiMeta && (
+          <li>
+            <span>{l === 'en' ? 'Zhongli station AQI' : '中壢測站 AQI'}</span>
+            <b>{aqiMeta.tier === 'live' ? station?.data?.aqi
+              : aqiMeta.tier === 'stale' ? (l === 'en' ? 'Out of date' : '資料已過時')
+                : (l === 'en' ? 'Unavailable' : '暫無資料')}</b>
+            <small>
+              <a href={AQI_MONITOR} target="_blank" rel="noopener noreferrer">{l === 'en' ? 'MOENV' : '環境部'}</a>
+              {' · '}{l === 'en' ? `${aqiKm} km from campus centre` : `距校園中心 ${aqiKm} 公里`}
+              {aqiMeta.asOf && <> · <time dateTime={aqiMeta.asOf}>
+                {new Date(aqiMeta.asOf).toLocaleString(l === 'en' ? 'en-GB' : 'zh-TW', {
+                  timeZone: 'Asia/Taipei', month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit',
+                  hourCycle: 'h23',
+                })} TPE
+              </time></>}
+            </small>
+          </li>
+        )}
         {t.steady.map(s => (
           <li key={s.id}>
             <span>{pick(s.label, l)}</span> <b>{pick(s.value, l)}</b>
@@ -845,13 +867,14 @@ export function App() {
   useEffect(() => {
     const emptyRoad: Live['road'] = { data: [], meta: { source: 'Freeway Bureau VD (MOTC)', tier: 'unavailable', asOf: null } };
     const emptyDocks: Live['docks'] = { data: [], meta: { source: 'YouBike 2.0 station feed', tier: 'unavailable', asOf: null } };
-    const applyRoad = (road: Live['road']) => setLive(prev => ({ docks: prev?.docks ?? emptyDocks, road }));
-    const applyDocks = (docks: Live['docks']) => setLive(prev => ({ road: prev?.road ?? emptyRoad, docks }));
+    const applyDocks = (docks: Live['docks']) => setLive(prev => ({ ...prev, road: prev?.road ?? emptyRoad, docks }));
     const stopRoad = pollFeed(async signal => {
-      const { road } = await fetchFeed<Pick<Live, 'road'>>('/api/live', signal);
-      if (!Array.isArray(road?.data) || !road.meta) throw new Error('Invalid freeway feed');
-      return road;
-    }, applyRoad, () => applyRoad(emptyRoad));
+      const data = await fetchFeed<Pick<Live, 'road' | 'stationAqi'>>('/api/live', signal);
+      return { road: Array.isArray(data.road?.data) && data.road.meta ? data.road : emptyRoad, stationAqi: data.stationAqi };
+    }, data => setLive(prev => ({ docks: prev?.docks ?? emptyDocks, ...data })),
+    () => setLive(prev => ({ docks: prev?.docks ?? emptyDocks, road: emptyRoad,
+      stationAqi: prev?.stationAqi && { data: null, meta: { ...prev.stationAqi.meta, tier: 'unavailable' } },
+    })));
     const stopDocks = pollFeed(async signal => {
       const rows = await fetchFeed<unknown[]>('https://apis.youbike.com.tw/json/station-yb2.json', signal);
       if (!Array.isArray(rows)) throw new Error('Invalid YouBike feed');

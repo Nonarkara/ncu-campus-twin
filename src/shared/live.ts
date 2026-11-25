@@ -1,10 +1,11 @@
 // Live open feeds that need no key: YouBike 2.0 docks and Freeway Bureau vehicle detectors near NCU.
 // Pure parsers so they can be tested on captured payloads. A station or detector missing from the feed is omitted, never zeroed.
-import type { Meta } from './today';
+import type { StationAqi } from './station-aqi';
+import type { Feed, Meta } from './today';
 
 export interface Dock { id: string; zh: string; en: string; capacity: number; bikes: number; free: number; lon: number; lat: number; at: string }
 export interface Flow { id: string; label: [string, string]; dir: 'S' | 'N'; kind: 'main' | 'exit'; lon: number; lat: number; speed: number | null; vph: number; at: string }
-export interface Live { docks: { meta: Meta; data: Dock[] }; road: { meta: Meta; data: Flow[] } }
+export interface Live { stationAqi?: Feed<StationAqi>; docks: { meta: Meta; data: Dock[] }; road: { meta: Meta; data: Flow[] } }
 
 /** YouBike stations on or at the edge of campus (station_no from the YouBike feed, positions checked against OSM amenity=bicycle_rental). */
 export const DOCKS = ['500304001', '500304032', '500305053'];
