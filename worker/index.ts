@@ -12,7 +12,7 @@ import {
   type NewsPayload,
 } from '../src/shared/news';
 
-interface Env { ASSETS: Fetcher; LIVE: KVNamespace; DEV?: string }
+interface Env { ASSETS: Fetcher; LIVE: KVNamespace; DEV?: string; BUILD?: string }
 const LAT = 24.9684, LON = 121.1916; // OSM relation/18727079 centre
 
 async function getJson(url: string, ms = 12000) {
@@ -45,7 +45,7 @@ async function air(): Promise<Feed<Air>> {
   try {
     const f = encodeURIComponent(`geo.distance(Locations/location,geography'POINT(${LON} ${LAT})') lt 0.03`);
     const e = encodeURIComponent("Datastreams($filter=name eq 'PM2.5';$expand=Observations($top=1;$orderby=phenomenonTime desc))");
-    const j = await getJson(`https://sta.colife.org.tw/STA_AirQuality_EPAIoT/v1.0/Things?$filter=${f}&$expand=${e}&$top=100`);
+    const j = await getJson(`https://sta.colife.org.tw/STA_AirQuality_EPAIoT/v1.0/Things?$filter=${f}&$expand=${e}&$top=100`, 1800);
     const cutoff = Date.now() - 2 * 3600e3;
     const obs = (j.value as any[]).flatMap(t => t.Datastreams ?? []).flatMap((d: any) => d.Observations ?? [])
       .filter((o: any) => typeof o.result === 'number' && o.result > 0 && Date.parse(o.phenomenonTime) > cutoff);
@@ -92,7 +92,11 @@ export default {
   },
   async fetch(req: Request, env: Env, ctx: ExecutionContext) {
     const url = new URL(req.url);
-    if (url.protocol === 'http:' && url.hostname !== 'localhost' && !env.DEV) { url.protocol = 'https:'; return Response.redirect(url.toString(), 301); }
+    const local = ['localhost', '127.0.0.1', '[::1]'].includes(url.hostname);
+    if (url.protocol === 'http:' && !local && !env.DEV) {
+      url.protocol = 'https:';
+      return Response.redirect(url.toString(), 301);
+    }
     if (url.pathname === '/api/health') return secure(await health(env));
     if (url.pathname === '/api/live') return secure(await live(env));
     if (url.pathname === '/api/news') return secure(await news(env, url, ctx));
@@ -102,13 +106,40 @@ export default {
 };
 
 const NEWS_SRC = 'Google News RSS (NCU + Taoyuan)';
+const NEWS_REFRESH_MS = 15 * 60e3;
+const NEWS_STALE_MS = 60 * 60e3;
+const ROAD_STALE_MS = 30 * 60e3;
 
-interface NewsStore { updatedAt: string; items: NewsItem[] }
+function decodeKV(raw: string | null): unknown {
+  if (!raw) return null;
+  try { return JSON.parse(raw); } catch { return null; }
+}
+
+function elapsed(at: string | null, now = Date.now()): number {
+  const age = at ? now - Date.parse(at) : NaN;
+  return Number.isFinite(age) && age >= 0 ? age : Infinity;
+}
+
+function roadSnapshot(raw: string | null, now = Date.now()): Live['road']['data'] {
+  const rows = decodeKV(raw);
+  return Array.isArray(rows) ? rows.filter(r => r && typeof r.at === 'string' && Number.isFinite(elapsed(r.at, now))) : [];
+}
+
+interface NewsStore { updatedAt: string | null; items: NewsItem[] }
+
+function newsSnapshot(raw: string | null): NewsStore | null {
+  const value = decodeKV(raw) as NewsStore | null;
+  return value && Array.isArray(value.items) && (value.updatedAt === null || typeof value.updatedAt === 'string') ? value : null;
+}
+
+function newsTier(store: NewsStore | null, now = Date.now()) {
+  if (!store?.items.length) return 'unavailable';
+  return elapsed(store.updatedAt, now) < NEWS_STALE_MS ? 'live' : 'stale';
+}
 
 async function pullNews(env: Env): Promise<NewsStore> {
   const nowIso = new Date().toISOString();
-  const prevRaw = await env.LIVE.get('news_db');
-  const prev: NewsItem[] = prevRaw ? (JSON.parse(prevRaw) as NewsStore).items ?? [] : [];
+  await env.LIVE.put('news_attempt', nowIso);
   const fetched = await Promise.allSettled(
     NEWS_FEEDS.map(async f => {
       const r = await fetch(f.url, { signal: AbortSignal.timeout(12000), headers: { 'user-agent': 'ncu-campus-twin/0.6' } });
@@ -117,21 +148,24 @@ async function pullNews(env: Env): Promise<NewsStore> {
     }),
   );
   const incoming = fetched.flatMap(res => (res.status === 'fulfilled' ? res.value : []));
-  const merged = mergeNewsCorpus(prev, incoming, 300);
-  const store: NewsStore = { updatedAt: nowIso, items: merged };
-  if (merged.length) await env.LIVE.put('news_db', JSON.stringify(store));
+  const previous = newsSnapshot(await env.LIVE.get('news_db'));
+  if (!incoming.length) return previous ?? { updatedAt: null, items: [] };
+  const store: NewsStore = { updatedAt: new Date().toISOString(), items: mergeNewsCorpus(previous?.items ?? [], incoming, 300) };
+  await env.LIVE.put('news_db', JSON.stringify(store));
   return store;
 }
 
 async function news(env: Env, url: URL, ctx: ExecutionContext): Promise<Response> {
-  const raw = await env.LIVE.get('news_db', { cacheTtl: 120 });
-  let store: NewsStore | null = raw ? (JSON.parse(raw) as NewsStore) : null;
-  const stale = !store || !store.items.length || Date.now() - Date.parse(store.updatedAt) > 15 * 60e3;
-  if (!store || !store.items.length) {
-    try { store = await pullNews(env); } catch { store = { updatedAt: new Date().toISOString(), items: [] }; }
-  } else if (stale) {
-    ctx.waitUntil(pullNews(env).catch(() => {}));
+  const [raw, attempt] = await Promise.all([
+    env.LIVE.get('news_db', { cacheTtl: 120 }),
+    env.LIVE.get('news_attempt', { cacheTtl: 60 }),
+  ]);
+  let store = newsSnapshot(raw);
+  if (elapsed(attempt ?? store?.updatedAt ?? null) > NEWS_REFRESH_MS) {
+    if (store) ctx.waitUntil(pullNews(env).catch(() => {}));
+    else store = await pullNews(env).catch(() => null);
   }
+  store ??= { updatedAt: null, items: [] };
 
   const fmt = url.searchParams.get('format');
   if (fmt === 'jsonl') {
@@ -154,7 +188,7 @@ async function news(env: Env, url: URL, ctx: ExecutionContext): Promise<Response
   }
 
   const payload: NewsPayload = {
-    meta: { source: NEWS_SRC, tier: store.items.length ? 'live' : 'unavailable', asOf: store.items.length ? store.updatedAt : null },
+    meta: { source: NEWS_SRC, tier: newsTier(store), asOf: store.updatedAt },
     items: store.items,
     stats: summarizeNews(store.items),
   };
@@ -177,29 +211,33 @@ async function pullRoad(env: Env) {
 /** Operational loop health check: reports live freshness & counts for KV-backed loops without leaking secrets. */
 async function health(env: Env): Promise<Response> {
   const nowMs = Date.now();
-  const [roadRaw, roadErr, newsRaw] = await Promise.all([
+  const [roadRaw, roadErr, newsRaw, newsAttempt] = await Promise.all([
     env.LIVE.get('road', { cacheTtl: 30 }),
     env.LIVE.get('road_err', { cacheTtl: 30 }),
     env.LIVE.get('news_db', { cacheTtl: 30 }),
+    env.LIVE.get('news_attempt', { cacheTtl: 30 }),
   ]);
-  const roadAll: Live['road']['data'] = JSON.parse(roadRaw ?? '[]');
+  const roadAll = roadSnapshot(roadRaw, nowMs);
   const roadAsOf = roadAll.map(f => f.at).sort().at(-1) ?? null;
   const roadAgeMin = roadAsOf ? Math.round((nowMs - Date.parse(roadAsOf)) / 60000) : null;
-  const roadFresh = roadAgeMin !== null && roadAgeMin < 30;
+  const roadFresh = elapsed(roadAsOf, nowMs) < ROAD_STALE_MS;
 
-  const newsStore: NewsStore | null = newsRaw ? (JSON.parse(newsRaw) as NewsStore) : null;
+  const newsStore = newsSnapshot(newsRaw);
   const newsAsOf = newsStore?.updatedAt ?? null;
-  const newsAgeMin = newsAsOf ? Math.round((nowMs - Date.parse(newsAsOf)) / 60000) : null;
-  const newsFresh = newsAgeMin !== null && newsAgeMin < 60 && (newsStore?.items?.length ?? 0) > 0;
+  const newsAge = elapsed(newsAsOf, nowMs);
+  const newsAgeMin = Number.isFinite(newsAge) ? Math.round(newsAge / 60000) : null;
+  const newsState = newsTier(newsStore, nowMs);
+  const newsFresh = newsState === 'live';
 
   const status = roadFresh && newsFresh ? 'ok' : 'degraded';
   return new Response(
     JSON.stringify({
       status,
       checkedAt: new Date(nowMs).toISOString(),
+      build: env.BUILD ?? null,
       loops: {
         road: { tier: roadFresh ? 'live' : 'stale', asOf: roadAsOf, ageMin: roadAgeMin, detectors: roadAll.length },
-        news: { tier: newsFresh ? 'live' : 'stale', asOf: newsAsOf, ageMin: newsAgeMin, articles: newsStore?.items?.length ?? 0 },
+        news: { tier: newsState, asOf: newsAsOf, lastAttemptAt: Number.isFinite(elapsed(newsAttempt, nowMs)) ? newsAttempt : null, ageMin: newsAgeMin, articles: newsStore?.items?.length ?? 0 },
       },
       edgeCronNote: roadErr ? 'Edge cron cannot reach tisvcloud (expected 522); Mac relay owns KV updates.' : null,
     }),
@@ -209,11 +247,12 @@ async function health(env: Env): Promise<Response> {
 
 /** Last good detector reading. Its own collection time travels with it, so the page shows its real age. */
 async function live(env: Env): Promise<Response> {
-  const all: Live['road']['data'] = JSON.parse((await env.LIVE.get('road', { cacheTtl: 60 })) ?? '[]');
-  // Older than 30 min is not "live": drop it rather than show a stale speed as current.
-  const data = all.filter(f => Date.now() - Date.parse(f.at) < 30 * 60e3);
+  const now = Date.now();
+  const all = roadSnapshot(await env.LIVE.get('road', { cacheTtl: 60 }), now);
+  // After expiry, suppress stale speeds and retain the time of the last observation.
+  const data = all.filter(f => elapsed(f.at, now) < ROAD_STALE_MS);
   const body: Pick<Live, 'road'> = {
-    road: { data, meta: { source: ROAD_SRC, tier: data.length ? 'live' : 'unavailable', asOf: data.map(f => f.at).sort().at(-1) ?? null } },
+    road: { data, meta: { source: ROAD_SRC, tier: data.length ? 'live' : all.length ? 'stale' : 'unavailable', asOf: (data.length ? data : all).map(f => f.at).sort().at(-1) ?? null } },
   };
   return new Response(JSON.stringify(body), { headers: { 'content-type': 'application/json', 'cache-control': 'public, max-age=60' } });
 }

@@ -36,12 +36,12 @@ export function NewsTicker({ news, l }: { news: NewsPayload | null; l: L }) {
   const [hovering, setHovering] = useState(false);
 
   useEffect(() => {
-    if (!items.length || paused || hovering) return;
+    if (!items.length || paused || hovering || news?.meta.tier !== 'live') return;
     const id = setInterval(() => {
       if (!document.hidden) setIdx(i => (i + 1) % items.length);
     }, 6000);
     return () => clearInterval(id);
-  }, [items.length, paused, hovering]);
+  }, [items.length, paused, hovering, news?.meta.tier]);
 
   if (!items.length) return null;
   const cur = items[idx % items.length];
@@ -50,7 +50,7 @@ export function NewsTicker({ news, l }: { news: NewsPayload | null; l: L }) {
     <div
       className="ticker"
       role="region"
-      aria-label={l === 'en' ? 'NCU and Taoyuan news wire' : '中大與桃園即時新聞跑馬燈'}
+      aria-label={l === 'en' ? 'NCU news wire' : '中大新聞快訊'}
       onMouseEnter={() => setHovering(true)}
       onMouseLeave={() => setHovering(false)}
       onFocus={() => setHovering(true)}
@@ -63,10 +63,11 @@ export function NewsTicker({ news, l }: { news: NewsPayload | null; l: L }) {
         {cur.title}
       </a>
       <span className="tk-meta">{cur.source} · {relAge(cur.publishedAt, l)}</span>
+      {news?.meta.tier === 'stale' && <span className="tk-stale">{l === 'en' ? 'Saved' : '已存'}</span>}
       <div className="tk-ctl">
         <button onClick={() => setIdx(i => (i - 1 + items.length) % items.length)} aria-label={l === 'en' ? 'Previous headline' : '上一則'}>‹</button>
-        <button onClick={() => setPaused(p => !p)} aria-pressed={paused} aria-label={paused ? (l === 'en' ? 'Play wire' : '繼續播放新聞') : (l === 'en' ? 'Pause wire' : '暫停新聞')}>
-          {paused ? '▶' : '❚❚'}
+        <button disabled={news?.meta.tier === 'stale'} onClick={() => setPaused(p => !p)} aria-pressed={paused} aria-label={paused ? (l === 'en' ? 'Play wire' : '繼續播放新聞') : (l === 'en' ? 'Pause wire' : '暫停新聞')}>
+          {paused || news?.meta.tier === 'stale' ? '▶' : '❚❚'}
         </button>
         <button onClick={() => setIdx(i => (i + 1) % items.length)} aria-label={l === 'en' ? 'Next headline' : '下一則'}>›</button>
       </div>
@@ -102,6 +103,7 @@ export function NewsCorpusPanel({ news, l }: { news: NewsPayload | null; l: L })
       </div>
 
       <p className="meta">
+        {news.meta.tier === 'stale' && (l === 'en' ? 'Saved corpus · ' : '已存新聞・')}
         {l === 'en'
           ? `NCU ${news.stats.ncuCount} · Taoyuan ${news.stats.taoyuanCount} · ${news.stats.last24h} in 24 h · ${news.meta.source}`
           : `中大 ${news.stats.ncuCount}・桃園 ${news.stats.taoyuanCount}・近 24 時 ${news.stats.last24h} 則・${news.meta.source}`}

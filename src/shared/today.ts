@@ -3,7 +3,7 @@
 import timetable from '../../data/timetable.json';
 import { CHECK_OPERATOR, routes, serviceDay, taipei, upcoming } from './transit';
 
-export type Tier = 'live' | 'forecast' | 'modeled' | 'schedule' | 'unavailable';
+export type Tier = 'live' | 'forecast' | 'modeled' | 'schedule' | 'stale' | 'unavailable';
 export interface Meta { source: string; tier: Tier; asOf: string | null }
 export interface Feed<T> { data: T | null; meta: Meta }
 

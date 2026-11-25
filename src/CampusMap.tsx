@@ -5,6 +5,7 @@ import workerUrl from 'maplibre-gl/dist/maplibre-gl-worker.mjs?worker&url';
 import {
   setWorkerUrl,
   Map as MLMapCtor,
+  LngLatBounds,
   type Map as MLMap,
   type StyleSpecification,
   type ExpressionSpecification,
@@ -93,7 +94,7 @@ interface CampusMapProps {
   portfolioIds: Set<string>;
   selectedStopName: string | null;
   onSelectStop: (name: string | null) => void;
-  focusCoord: { coord: [number, number]; seq: number } | null;
+  focusCoord: { coord: [number, number]; seq: number; stopRadius?: true } | null;
   twin: TwinData;
 }
 
@@ -598,6 +599,12 @@ export function CampusMap({
     const m = map.current;
     if (!m || !ready || !focusCoord) return;
     const reduced = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+    if (focusCoord.stopRadius) {
+      const bounds = new LngLatBounds();
+      for (const [lon, lat] of circlePolygon(focusCoord.coord, 300)) bounds.extend([lon, lat]);
+      m.fitBounds(bounds, { padding: 28, pitch: 0, bearing: 0, duration: reduced ? 0 : 280 });
+      return;
+    }
     m.easeTo({
       center: focusCoord.coord,
       zoom: Math.max(m.getZoom(), 16.5),
@@ -664,7 +671,6 @@ export function CampusMap({
 
   return (
     <div className="map" id="map">
-      <div ref={el} style={{ position: 'absolute', inset: 0 }} />
       <div className="mapctl">
         <button aria-pressed={!photo} onClick={() => setPhoto(false)}>{l === 'en' ? 'Plan' : '平面'}</button>
         <button aria-pressed={photo} onClick={() => setPhoto(true)}>{l === 'en' ? 'Photo' : '航照'}</button>
@@ -672,6 +678,7 @@ export function CampusMap({
         <button onClick={resetView} aria-label={l === 'en' ? 'Reset map view' : '重置地圖視角'}>{l === 'en' ? 'Reset' : '重置'}</button>
       </div>
       <div className="legend">{legend}</div>
+      <div className="map-surface" ref={el} />
     </div>
   );
 }
